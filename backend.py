@@ -121,21 +121,17 @@ def get_data():
     session.commit()
     return filtered_list
 
+# Shows a tool and then it's publications in a list
 @app.route("/")
 def show_tools():
-    stmt = select(db.tools)
+    tools = select(db.tools)
     result = []
-    for tool in session.scalars(stmt):
+    for tool in session.scalars(tools):
         result.append(tool.serialize())
+        publications = select(db.publications).where(db.publications.bio_id == tool.bio_id)
+        for publication in session.scalars(publications):
+            result.append(publication.serialize())
     return result
-
-# @app.route("/show_publications")
-# def show_publications():
-#     stmt2 = select(db.publications)
-#     result = []
-#     for publication in session.scalars(stmt2):
-#         result.append(publication.serialize())
-#     return result
 
 if __name__ == "__main__":
     app.run(debug=True)
