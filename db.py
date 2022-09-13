@@ -16,9 +16,10 @@ class tools(base):
     description = Column(String)
     total_citations = Column(Integer)
     maturity = Column(String)
+    cost = Column(String)
     license = Column(String)
 
-    def __init__(self, bio_id, version, bio_link, homepage, description, total_citations, maturity, license):
+    def __init__(self, bio_id, version, bio_link, homepage, description, total_citations, maturity, cost, license):
         self.bio_id = bio_id
         self.version = version
         self.bio_link = bio_link
@@ -26,6 +27,7 @@ class tools(base):
         self.description = description
         self.total_citations = total_citations
         self.maturity = maturity
+        self.cost = cost
         self.license = license
 
     def serialize(self):
@@ -37,6 +39,7 @@ class tools(base):
                 'description': self.description,
                 'total_citations': self.total_citations,
                 'maturity': self.maturity,
+                'cost': self.cost,
                 'license': self.license
                }
 
@@ -199,6 +202,21 @@ class outputs(base):
                 'term': self.term
                }
 
+class collection_ids(base):
+    __tablename__ = 'collection_ids'
 
-base.metadata.drop_all(engine)
+    bio_id = Column(String, primary_key=True)
+    coll_id = Column(String, primary_key=True)
+
+    def __init__(self, bio_id, coll_id):
+        self.bio_id = bio_id
+        self.coll_id = coll_id
+
+    def serialize(self):
+        return {
+                'bio_id': self.bio_id,
+                'coll_id': self.coll_id
+        }
+
+
 base.metadata.create_all(engine)

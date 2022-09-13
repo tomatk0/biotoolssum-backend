@@ -83,9 +83,16 @@ def get_input_output(functions, bio_id):
         term = item['data']['term']
         new_output = db.outputs(bio_id, term)
         session.add(new_output)
+    session.commit()
 
-@app.route("/get_tools")
-def get_data():
+def get_collection_ids(collection_ids, bio_id):
+    for coll_id in collection_ids:
+        new_coll_id = db.collection_ids(bio_id, coll_id)
+        session.add(new_coll_id)
+    session.commit()
+
+@app.route("/get_tools_from_api")
+def get_tools_from_api():
     filtered_list = []
     response = requests.get('https://bio.tools/api/tool/?&collectionID="elixir-cz"&format=json').json()
     count = math.ceil(response['count'] / 10) + 1
@@ -103,9 +110,11 @@ def get_data():
             get_topics(item['topic'], bio_id)
             get_functions(item['function'], bio_id)
             maturity = item['maturity']
+            cost = item['cost']
             get_platforms(item['operatingSystem'], bio_id)
             get_input_output(item['function'], bio_id)
             license = item['license']
+            get_collection_ids(item['collectionID'], bio_id)
             for publication in item['publication']:
                 doi = publication['doi']
                 pmid = publication['pmid']
@@ -124,7 +133,7 @@ def get_data():
                 total_citations += response['hitCount']
                 new_publication = db.publications(doi, bio_id, pmid, pmcid)
                 session.add(new_publication)
-            tool = db.tools(bio_id, version, bio_link, homepage, description, total_citations, maturity, license)
+            tool = db.tools(bio_id, version, bio_link, homepage, description, total_citations, maturity, cost, license)
             session.add(tool)
     session.commit()
     return filtered_list
@@ -163,6 +172,9 @@ def show_tools():
         outputs = select(db.outputs).where(db.outputs.bio_id == tool.bio_id)
         for output in session.scalars(outputs):
             result.append(output.serialize())
+        collection_ids = select(db.collection_ids).where(db.collection_ids.bio_id == tool.bio_id)
+        for coll_id in session.scalars(collection_ids):
+            result.append(coll_id.serialize())
         
     return result
 
