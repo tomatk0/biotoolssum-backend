@@ -3,6 +3,7 @@ import requests
 import db
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
+import math
 
 app = Flask(__name__)
 
@@ -12,93 +13,100 @@ session = Session()
 def get_latest_version(versions):
     return versions[0] if versions else ''
 
-def get_tool_types(tool_types):
-    result = ''
-    for item in tool_types:
-        result += f'{item}|'
-    return result[:-1]
+def get_tool_types(tool_types, bio_id):
+    for name in tool_types:
+        new_tool_type = db.tool_types(bio_id, name)
+        session.add(new_tool_type)
+    session.commit()
 
-def get_institutes(credit):
-    result = ''
+def get_institutes(credit, bio_id):
     for item in credit:
         if item['typeEntity'] == 'Institute':
             name = item['name']
-            result += f'{name}|'
-    return result[:-1]
+            new_institute = db.institutes(bio_id, name)
+            session.add(new_institute)
+    session.commit()
 
-def get_topics(topics):
-    result = ''
+def get_topics(topics, bio_id):
+    terms = []
     for item in topics:
         term = item['term']
         uri = item['uri']
-        result += f'{term}|{uri}|'
-    return result[:-1]
+        if term in terms:
+            continue
+        terms.append(term)
+        new_topic = db.topics(bio_id, term, uri)
+        session.add(new_topic)
+    session.commit()
 
-def get_functions(functions):
-    result = ''
+def get_functions(functions, bio_id):
     if not functions:
-        return result
+        return
     for item in functions[0]['operation']:
         term = item['term']
         uri = item['uri']
-        result += f'{term}|{uri}|'
-    return result[:-1]
+        new_function = db.functions(bio_id, term, uri)
+        session.add(new_function)
+    session.commit()
 
-def get_platforms(platforms):
-    result = ''
-    for item in platforms:
-        result += f'{item}|'
-    return result[:-1]
 
-def get_years(citations):
+def get_platforms(platforms, bio_id):
+    for name in platforms:
+        new_platform = db.platforms(bio_id, name)
+        session.add(new_platform)
+    session.commit()
+
+def get_years(citations, doi):
     years = {}
-    result = ''
     if not citations['citation']:
-        return ''
+        return 
     for item in citations['citation']:
-        year = item['pubYear']
+        year = str(item['pubYear'])
         years[year] = years.get(year, 0) + 1
     for key, val in years.items():
-        result += f'{key}:{val}|'
-    return result[:-1]
+        new_year = db.years(doi, key, str(val))
+        session.add(new_year)
+    session.commit()
 
-def get_input_output(functions):
-    input = ''
-    output = ''
+def get_input_output(functions, bio_id):
     if not functions:
-        return input, output
+        return
+    input_terms = []
     for item in functions[0]['input']:
         term = item['data']['term']
-        input += f'{term}|'
+        if term in input_terms:
+            continue
+        input_terms.append(term)
+        new_input = db.inputs(bio_id, term)
+        session.add(new_input)
     for item in functions[0]['output']:
         term = item['data']['term']
-        output += f'{term}|'
-    return input[:-1], output[:-1]
+        new_output = db.outputs(bio_id, term)
+        session.add(new_output)
 
 @app.route("/get_tools")
 def get_data():
     filtered_list = []
-    publication_id = 1
-    for i in range(1, 9):
+    response = requests.get('https://bio.tools/api/tool/?&collectionID="elixir-cz"&format=json').json()
+    count = math.ceil(response['count'] / 10) + 1
+    for i in range(1, count):
         response = requests.get(f'https://bio.tools/api/tool/?page={i}&collectionID="elixir-cz"&format=json').json()
         for item in response['list']:
             bio_id = item['biotoolsID']
             version = get_latest_version(item['version'])
             bio_link = f'https://bio.tools/{bio_id}'
             homepage = item['homepage']
-            tool_type = get_tool_types(item['toolType'])
-            institute = get_institutes(item['credit'])
+            get_tool_types(item['toolType'], bio_id)
+            get_institutes(item['credit'], bio_id)
             description = item['description']
             total_citations = 0
-            topic = get_topics(item['topic'])
-            function = get_functions(item['function'])
+            get_topics(item['topic'], bio_id)
+            get_functions(item['function'], bio_id)
             maturity = item['maturity']
-            platforms = get_platforms(item['operatingSystem'])
-            input, output = get_input_output(item['function'])
+            get_platforms(item['operatingSystem'], bio_id)
+            get_input_output(item['function'], bio_id)
             license = item['license']
             for publication in item['publication']:
-                id = publication_id
-                publication_id += 1
                 doi = publication['doi']
                 pmid = publication['pmid']
                 pmcid = publication['pmcid']
@@ -111,12 +119,12 @@ def get_data():
                 result = response['resultList']['result']
                 if result:
                     pmid = result[0]['id']
+                    doi = result[0]['doi']
                 response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
                 total_citations += response['hitCount']
-                years = get_years(response['citationList'])
-                new_publication = db.publications(id, bio_id, doi, pmid, pmcid, years)
+                new_publication = db.publications(doi, bio_id, pmid, pmcid)
                 session.add(new_publication)
-            tool = db.tools(bio_id, version, bio_link, homepage, tool_type, institute, description, total_citations, topic, function, maturity, platforms, input, output, license)
+            tool = db.tools(bio_id, version, bio_link, homepage, description, total_citations, maturity, license)
             session.add(tool)
     session.commit()
     return filtered_list
@@ -131,6 +139,31 @@ def show_tools():
         publications = select(db.publications).where(db.publications.bio_id == tool.bio_id)
         for publication in session.scalars(publications):
             result.append(publication.serialize())
+            years = select(db.years).where(db.years.doi == publication.doi)
+            for year in session.scalars(years):
+                result.append(year.serialize())
+        functions = select(db.functions).where(db.functions.bio_id == tool.bio_id)
+        for function in session.scalars(functions):
+            result.append(function.serialize())
+        institutes = select(db.institutes).where(db.institutes.bio_id == tool.bio_id)
+        for institute in session.scalars(institutes):
+            result.append(institute.serialize())
+        topics = select(db.topics).where(db.topics.bio_id == tool.bio_id)
+        for topic in session.scalars(topics):
+            result.append(topic.serialize())
+        platforms = select(db.platforms).where(db.platforms.bio_id == tool.bio_id)
+        for platform in session.scalars(platforms):
+            result.append(platform.serialize())
+        tool_types = select(db.tool_types).where(db.tool_types.bio_id == tool.bio_id)
+        for tool_type in session.scalars(tool_types):
+            result.append(tool_type.serialize())
+        inputs = select(db.inputs).where(db.inputs.bio_id == tool.bio_id)
+        for input in session.scalars(inputs):
+            result.append(input.serialize())
+        outputs = select(db.outputs).where(db.outputs.bio_id == tool.bio_id)
+        for output in session.scalars(outputs):
+            result.append(output.serialize())
+        
     return result
 
 if __name__ == "__main__":
