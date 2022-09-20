@@ -1,8 +1,8 @@
-from flask import Flask, session
+from flask import Flask, session, render_template, request
 import requests
 import db
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, exists
+from sqlalchemy import select
 from sqlalchemy.sql.expression import intersect
 import math
 
@@ -141,7 +141,7 @@ def get_data_from_other_tables(tool):
         result.append(coll_id.serialize())
     return result
 
-def get_tools_from_api(coll_id, topic, function_or_operation, input, output, tool_type, platform, cost_query, count_db):
+def get_tools_from_api(coll_id, topic, count_db):
     result = []
     response = requests.get(f'https://bio.tools/api/tool/?{coll_id}{topic}&format=json').json()
     count_api = response['count'] - count_db
@@ -182,9 +182,10 @@ def get_tools_from_api(coll_id, topic, function_or_operation, input, output, too
                 else:
                     response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmcid}&format=json').json()
                 result = response['resultList']['result']
-                if result:
-                    pmid = result[0]['id']
+                if result and not pub_doi:
                     pub_doi = result[0]['doi']
+                if result and not pmid:
+                    pmid = result[0]['id']
                 response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
                 total_citations += response['hitCount']
                 new_publication = db.publications(pub_doi, id, pmid, pmcid)
@@ -197,20 +198,18 @@ def get_tools_from_api(coll_id, topic, function_or_operation, input, output, too
     session.commit()
     return result, count_api
 
-def get_tools_from_db(coll_id, topic, function_or_operation, input, output, tool_type, platform, cost):
+def get_tools_from_db(coll_id, topic):
     result = []
     count = 0
     coll_id_result = select(db.tools).where(db.tools.bio_id == db.collection_ids.bio_id, db.collection_ids.coll_id == coll_id)
     topic_result = select(db.tools).where(db.tools.bio_id == db.topics.bio_id, db.topics.term == topic)
-    function_or_operation_result = select(db.tools).where(db.tools.bio_id == db.functions.bio_id, db.functions.term == function_or_operation)
-    input_result = select(db.tools).where(db.tools.bio_id == db.inputs.bio_id, db.inputs.term == input)
-    output_result = select(db.tools).where(db.tools.bio_id == db.outputs.bio_id, db.outputs.term == output)
-    tool_type_result = select(db.tools).where(db.tools.bio_id == db.tool_types.bio_id, db.tool_types.name == tool_type)
-    platform_result = select(db.tools).where(db.tools.bio_id == db.platforms.bio_id, db.platforms.name == platform)
-    cost_result = select(db.tools).where(db.tools.cost == cost)
-    res = intersect(coll_id_result, topic_result)
-    for r in session.scalars(res):
-        tool_select = select(db.tools).where(db.tools.bio_id == r)
+    query = intersect(coll_id_result, topic_result)
+    if coll_id and not topic:
+        query = intersect(coll_id_result)
+    elif not coll_id and topic:
+        query = intersect(topic_result)
+    for id in session.scalars(query):
+        tool_select = select(db.tools).where(db.tools.bio_id == id)
         for tool in session.scalars(tool_select):
             result.append(tool.serialize())
             data = get_data_from_other_tables(tool)
@@ -218,15 +217,20 @@ def get_tools_from_db(coll_id, topic, function_or_operation, input, output, tool
             count += 1
     return result, count
 
-@app.route("/")
-def get_tools():
-    coll_id = 'COVID-19'
-    topic = 'Genomics'
-    result_db, count_db = get_tools_from_db(coll_id, topic, '', '', '', '', '', '')
+@app.route("/get_parameters", methods=["POST", "GET"])
+def get_parameters():
+    if request.method == "POST":
+        coll_id_form = request.form["coll_id"]
+        topic_form = request.form["topic"]
+        return get_tools(coll_id_form, topic_form)
+    return render_template("get_parameters.html")
+
+def get_tools(coll_id, topic):
+    result_db, count_db = get_tools_from_db(coll_id, topic)
     print(f'TOOLS FROM DB:{count_db}')
-    coll_id = '&collectionID=\"COVID-19\"'
-    topic = '&topic=\"Genomics\"'
-    result_api, count_api = get_tools_from_api(coll_id, topic, '', '', '', '', '', '', count_db)
+    coll_id = f'&collectionID=\"{coll_id}\"' if coll_id else ''
+    topic = f'&topic=\"{topic}\"' if topic else ''
+    result_api, count_api = get_tools_from_api(coll_id, topic, count_db)
     print(f'TOOLS FROM API:{count_api}')
     result_db.extend(result_api)
     return result_db
