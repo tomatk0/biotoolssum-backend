@@ -217,7 +217,7 @@ def get_tools_from_db(coll_id, topic):
             count += 1
     return result, count
 
-@app.route("/get_parameters", methods=["POST", "GET"])
+@app.route("/", methods=["POST", "GET"])
 def get_parameters():
     if request.method == "POST":
         coll_id_form = request.form["coll_id"]
