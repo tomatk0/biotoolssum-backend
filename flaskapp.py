@@ -234,7 +234,6 @@ def get_tools(coll_id, topic):
     print(f'TOOLS FROM API:{count_api}')
     result_db.extend(result_api)
     return result_db
-    
 
 if __name__ == "__main__":
     app.run(debug=True)
