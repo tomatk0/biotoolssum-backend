@@ -1,4 +1,4 @@
-from flask import Flask, session, render_template, request
+from flask import Flask, session, render_template, request, jsonify
 import requests
 import db
 from sqlalchemy.orm import sessionmaker
@@ -7,6 +7,7 @@ from sqlalchemy.sql.expression import intersect
 import math
 
 app = Flask(__name__)
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 
 Session = sessionmaker(bind=db.engine)
 session = Session()
@@ -232,8 +233,7 @@ def get_tools(coll_id, topic):
     topic = f'&topic=\"{topic}\"' if topic else ''
     result_api, count_api = get_tools_from_api(coll_id, topic, count_db)
     print(f'TOOLS FROM API:{count_api}')
-    result_db.extend(result_api)
-    return result_db
+    return jsonify(result_db)
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -2,7 +2,8 @@ from sqlalchemy import create_engine
 from sqlalchemy import Column, String, Integer, Identity
 from sqlalchemy.ext.declarative import declarative_base
 
-engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite')
+engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite',
+                        connect_args={'check_same_thread': False})
 
 base = declarative_base()
 
