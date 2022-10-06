@@ -216,15 +216,28 @@ def get_tools_from_db(coll_id, topic):
             result.append(tool.serialize())
     return result
 
+def show_only_names(tools, only_names):
+    if only_names != 'on':
+        return tools
+    result = []
+    for tool in tools:
+        tool_select = select(db.tools).where(db.tools.bio_id == tool['bio_id'])
+        for t in session.scalars(tool_select):
+            result.append(t.serialize_name_only())
+    return result
+
 @app.route("/", methods=["POST", "GET"])
 def get_parameters():
     if request.method == "POST":
-        coll_id_form = request.form["coll_id"]
-        topic_form = request.form["topic"]
-        return get_tools(coll_id_form, topic_form)
+        coll_id_form = request.form.get("coll_id")
+        topic_form = request.form.get("topic")
+        if not coll_id_form and not topic_form:
+            return render_template("get_parameters.html")
+        only_names_form = request.form.get('only_names')
+        return get_tools(coll_id_form, topic_form, only_names_form)
     return render_template("get_parameters.html")
 
-def get_tools(coll_id, topic):
+def get_tools(coll_id, topic, only_names):
     result_db = get_tools_from_db(coll_id, topic)
     count_db = len(result_db)
     print(f'TOOLS FROM DB:{count_db}')
@@ -233,7 +246,8 @@ def get_tools(coll_id, topic):
     result_api = get_tools_from_api(coll_id, topic, count_db)
     print(f'TOOLS FROM API:{len(result_api)}')
     result_db.extend(result_api)
-    return jsonify(result_db)
+    result = show_only_names(result_db, only_names)
+    return jsonify(result)
 
 if __name__ == "__main__":
     app.run(debug=True)

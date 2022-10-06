@@ -49,6 +49,11 @@ class tools(base):
                 'collection_ids': self.collection_ids
                }
 
+    def serialize_name_only(self):
+        return {
+            'bio_id': self.bio_id
+        }
+
 class publications(base):
     __tablename__ = 'publications'
 
