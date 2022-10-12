@@ -231,27 +231,39 @@ def show_only_names(tools, only_names):
             result.append(t.serialize_name_only())
     return result
 
+def get_existing_queries():
+    result = []
+    queries_select = select(db.queries)
+    for query in session.scalars(queries_select):
+        result.append(query.serialize())
+    return result
+
 @app.route("/", methods=["POST", "GET"])
 def get_parameters():
+    existing_queries = get_existing_queries()
     if request.method == "POST":
         coll_id_form = request.form.get("coll_id")
         topic_form = request.form.get("topic")
         if not coll_id_form and not topic_form:
             return render_template("get_parameters.html")
-        only_names_form = request.form.get('only_names')
-        return get_tools(coll_id_form, topic_form, only_names_form)
-    return render_template("get_parameters.html")
+        only_names_form = 'off' if not request.form.get('only_names') else 'on'
+        new_query = db.queries(collection_id=coll_id_form, topic=topic_form, only_names=only_names_form)
+        session.add(new_query)
+        session.commit()
+        return render_template("get_parameters.html", content=existing_queries)
+    return render_template("get_parameters.html", content=existing_queries)
 
 @app.route("/data", methods=["POST"])
 @cross_origin()
 def get_data_from_frontend():
     if request.method == "POST":
         request_data = request.get_json()
-        print(request_data)
-        coll_id = request_data['collectionID']
-        topic = request_data['topic']
-        only_names = request_data['onlyNames']
-        return get_tools(coll_id, topic, only_names)
+        id = request_data['id']
+        query_select = select(db.queries).where(db.queries.id == id)
+        query = None
+        for q in session.scalars(query_select):
+            query = q
+        return get_tools(query.collection_id, query.topic, query.only_names)
 
 def get_tools(coll_id, topic, only_names):
     result_db = get_tools_from_db(coll_id, topic)

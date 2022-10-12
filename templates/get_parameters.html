@@ -1,4 +1,4 @@
-{% block title %}Get parameters for querying{% endblock %}
+{% block title %}Create a query{% endblock %}
 
 {% block content %}
 <form action="#" method="post">
@@ -15,5 +15,11 @@
     <input type="checkbox" name="only_names"></p>
 
     <p><input type="submit" value="Submit"></p>
+
+    <p>Existing queries:
+        {% for item in content %}
+            <p>{{item}}</p>
+        {% endfor %}
+    </p>
 </form>
 {% endblock %}

@@ -1,11 +1,11 @@
 from sqlalchemy import create_engine
-from sqlalchemy import Column, String
+from sqlalchemy import Column, String, Integer
 from sqlalchemy.ext.declarative import declarative_base
 
-engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
-                        connect_args={'check_same_thread': False})
-# engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+# engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
 #                         connect_args={'check_same_thread': False})
+engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+                        connect_args={'check_same_thread': False})
 
 base = declarative_base()
 
@@ -176,5 +176,20 @@ class collection_ids(base):
                 'coll_id': self.coll_id
         }
 
+class queries(base):
+    __tablename__ = 'queries'
+
+    id = Column(Integer, primary_key=True)
+    collection_id = Column(String)
+    topic = Column(String)
+    only_names = Column(String)
+
+    def serialize(self):
+        return {
+            'id': self.id,
+            'collection_id': self.collection_id,
+            'topic': self.topic,
+            'only_names': self.only_names
+        }
 
 base.metadata.create_all(engine)
