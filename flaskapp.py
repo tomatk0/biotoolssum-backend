@@ -5,9 +5,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 from sqlalchemy.sql.expression import intersect
 import math
+from flask_cors import CORS, cross_origin
 
 app = Flask(__name__)
+cors = CORS(app)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
+app.config['CORS_HEADERS'] = 'Content-Type'
 
 Session = sessionmaker(bind=db.engine)
 session = Session()
@@ -191,6 +194,7 @@ def get_tools_from_api(coll_id, topic, count_db):
         response = requests.get(f'https://bio.tools/api/tool/?page={i}{coll_id}{topic}&format=json').json()
         for item in response['list']:
             id = item['biotoolsID']
+            print(f'Processing {id} from API')
             if bool(session.query(db.tools).filter_by(bio_id=id).first()):
                 continue
             tool = add_tool(item, id)
@@ -212,6 +216,7 @@ def get_tools_from_db(coll_id, topic):
     for id in session.scalars(query):
         tool_select = select(db.tools).where(db.tools.bio_id == id)
         for tool in session.scalars(tool_select):
+            print(f'Processing {tool.bio_id} from DB')
             get_lists_for_tool(tool)
             result.append(tool.serialize())
     return result
@@ -236,6 +241,17 @@ def get_parameters():
         only_names_form = request.form.get('only_names')
         return get_tools(coll_id_form, topic_form, only_names_form)
     return render_template("get_parameters.html")
+
+@app.route("/data", methods=["POST"])
+@cross_origin()
+def get_data_from_frontend():
+    if request.method == "POST":
+        request_data = request.get_json()
+        print(request_data)
+        coll_id = request_data['collectionID']
+        topic = request_data['topic']
+        only_names = request_data['onlyNames']
+        return get_tools(coll_id, topic, only_names)
 
 def get_tools(coll_id, topic, only_names):
     result_db = get_tools_from_db(coll_id, topic)
