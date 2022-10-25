@@ -222,7 +222,7 @@ def get_tools_from_db(coll_id, topic):
     return result
 
 def show_only_names(tools, only_names):
-    if only_names != 'on':
+    if only_names == 'off':
         return tools
     result = []
     for tool in tools:
@@ -240,17 +240,20 @@ def get_existing_queries():
 
 @app.route("/", methods=["POST", "GET"])
 def get_parameters():
-    existing_queries = get_existing_queries()
+    existing_queries = get_existing_queries() 
     if request.method == "POST":
         coll_id_form = request.form.get("coll_id")
         topic_form = request.form.get("topic")
         if not coll_id_form and not topic_form:
             return render_template("get_parameters.html")
         only_names_form = 'off' if not request.form.get('only_names') else 'on'
+        if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, only_names=only_names_form).first()):
+            return render_template("get_parameters.html", content=existing_queries)  
         new_query = db.queries(collection_id=coll_id_form, topic=topic_form, only_names=only_names_form)
         session.add(new_query)
         session.commit()
-        return render_template("get_parameters.html", content=existing_queries)
+        existing_queries = get_existing_queries()
+        return render_template("get_parameters.html", content=existing_queries)   
     return render_template("get_parameters.html", content=existing_queries)
 
 @app.route("/data", methods=["POST"])
