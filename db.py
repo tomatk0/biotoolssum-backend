@@ -2,10 +2,10 @@ from sqlalchemy import create_engine
 from sqlalchemy import Column, String, Integer
 from sqlalchemy.ext.declarative import declarative_base
 
-engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
-                        connect_args={'check_same_thread': False})
-# engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+# engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
 #                         connect_args={'check_same_thread': False})
+engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+                        connect_args={'check_same_thread': False})
 
 base = declarative_base()
 
@@ -28,6 +28,9 @@ class tools(base):
     inputs = []
     outputs = []
     collection_ids = []
+    elixir_platforms = []
+    elixir_nodes = []
+    elixir_communities = []
 
     def serialize(self):
         return {
@@ -46,7 +49,10 @@ class tools(base):
                 'tool_types': self.tool_types,
                 'inputs': self.inputs,
                 'outputs': self.outputs,
-                'collection_ids': self.collection_ids
+                'collection_ids': self.collection_ids,
+                'elixir_platforms': self.elixir_platforms,
+                'elixir_nodes': self.elixir_nodes,
+                'elixir_communities': self.elixir_communities
                }
 
     def serialize_name_only(self):
@@ -176,20 +182,66 @@ class collection_ids(base):
                 'coll_id': self.coll_id
         }
 
+class elixir_platforms(base):
+    __tablename__ = 'elixir_platforms'
+
+    bio_id = Column(String, primary_key=True)
+    name = Column(String, primary_key=True)
+
+    def serialize(self):
+        return {
+            'name': self.name
+        }
+
+class elixir_nodes(base):
+    __tablename__ = 'elixir_nodes'
+
+    bio_id = Column(String, primary_key=True)
+    name = Column(String, primary_key=True)
+    
+    def serialize(self):
+        return {
+            'name': self.name
+        }
+
+class elixir_communities(base):
+    __tablename__ = 'elixir_communities'
+
+    bio_id = Column(String, primary_key=True)
+    name = Column(String, primary_key=True)
+
+    def serialize(self):
+        return {
+            'name': self.name
+        }
+
 class queries(base):
     __tablename__ = 'queries'
 
     id = Column(Integer, primary_key=True)
     collection_id = Column(String)
     topic = Column(String)
+    tools_list = Column(String)
     only_names = Column(String)
 
     def serialize(self):
-        return {
-            'id': self.id,
-            'collection_id': self.collection_id,
-            'topic': self.topic,
-            'only_names': self.only_names
-        }
+        if self.collection_id:
+            return {
+                'id': self.id,
+                'collection_id': self.collection_id,
+                'only_names': self.only_names
+            }
+        elif self.topic:
+            return {
+                'id': self.id,
+                'topic': self.topic,
+                'only_names': self.only_names
+            }
+        elif self.tools_list:
+            return {
+                'id': self.id,
+                'tools_list': self.tools_list,
+                'only_names': self.only_names
+            }
 
 base.metadata.create_all(engine)

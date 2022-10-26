@@ -3,13 +3,16 @@
 {% block content %}
 <form action="#" method="post">
 
-    <p>Find tools based on collection id or topic:</p>
+    <p>Find tools based on collection id or topic (fill only one field):</p>
     
     <p>Collection ID:</p>
     <input type="text" name="coll_id">
 
     <p>Topic:</p>
     <input type="text" name="topic">
+
+    <p>Create a list of tools (separate with commas):</p>
+    <input type="text" name="tools_list">
     
     <p>Show only names of tools:
     <input type="checkbox" name="only_names"></p>

@@ -3,7 +3,6 @@ import requests
 import db
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
-from sqlalchemy.sql.expression import intersect
 import math
 from flask_cors import CORS, cross_origin
 
@@ -81,25 +80,17 @@ def add_years(citations, doi):
         session.add(new_year)
     session.commit()
 
-def add_input_output(functions, bio_id):
+def add_input_output(functions, bio_id, input_or_output, table):
     if not functions:
         return
-    input_terms = []
-    for item in functions[0]['input']:
+    already_used = []
+    for item in functions[0][input_or_output]:
         term = item['data']['term']
-        if term in input_terms:
+        if term in already_used:
             continue
-        input_terms.append(term)
-        new_input = db.inputs(bio_id=bio_id, term=term)
-        session.add(new_input)
-    output_terms = []
-    for item in functions[0]['output']:
-        term = item['data']['term']
-        if term in output_terms:
-            continue
-        output_terms.append(term)
-        new_output = db.outputs(bio_id=bio_id, term=term)
-        session.add(new_output)
+        already_used.append(term)
+        new_item = table(bio_id=bio_id, term=term)
+        session.add(new_item)
     session.commit()
 
 def add_collection_ids(collection_ids, bio_id):
@@ -107,8 +98,21 @@ def add_collection_ids(collection_ids, bio_id):
     for coll_id in collection_ids:
         if coll_id in already_used:
             continue
+        already_used.append(coll_id)
         new_coll_id = db.collection_ids(bio_id=bio_id, coll_id=coll_id)
         session.add(new_coll_id)
+    session.commit()
+
+def add_elixir_platforms_nodes_communities(items, bio_id, table):
+    if not items:
+        return
+    already_used = []
+    for item in items:
+        if item in already_used:
+            continue
+        already_used.append(item)
+        new_item = table(bio_id=bio_id, name=item)
+        session.add(new_item)
     session.commit()
 
 def add_publications_and_years(publications, bio_id):
@@ -146,9 +150,13 @@ def add_tool(item, id):
     add_functions(item['function'], id)
     maturity = item['maturity']
     add_platforms(item['operatingSystem'], id)
-    add_input_output(item['function'], id)
+    add_input_output(item['function'], id, 'input', db.inputs)
+    add_input_output(item['function'], id, 'output', db.outputs)
     license = item['license']
     add_collection_ids(item['collectionID'], id)
+    add_elixir_platforms_nodes_communities(item['elixirPlatform'], id, db.elixir_platforms)
+    add_elixir_platforms_nodes_communities(item['elixirNode'], id, db.elixir_nodes)
+    add_elixir_platforms_nodes_communities(item['elixirCommunity'], id, db.elixir_communities)
     add_publications_and_years(item['publication'], id)
     tool = db.tools(bio_id=id, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license)
     return tool
@@ -182,9 +190,28 @@ def get_lists_for_tool(tool):
     tool.inputs = get_data_from_table(tool, db.inputs)
     tool.outputs = get_data_from_table(tool, db.outputs)
     tool.collection_ids = get_data_from_table(tool, db.collection_ids)
+    tool.elixir_platforms = get_data_from_table(tool, db.elixir_platforms)
+    tool.elixir_nodes = get_data_from_table(tool, db.elixir_nodes)
+    tool.elixir_communities = get_data_from_table(tool, db.elixir_communities)
 
-def get_tools_from_api(coll_id, topic, count_db):
+def get_tools_from_api(coll_id, topic, tools_list, count_db):
     result = []
+    if tools_list:
+        for t in tools_list.split(','):
+            response = requests.get(f'https://bio.tools/api/tool/?&biotoolsID=\"{t}\"&format=json').json()
+            if not response['list']:
+                continue
+            item = response['list'][0]
+            id = item['biotoolsID']
+            print(f'Processing {id} from API (list)')
+            if bool(session.query(db.tools).filter_by(bio_id=id).first()):
+                continue
+            tool = add_tool(item, id)
+            session.add(tool)
+            get_lists_for_tool(tool)
+            result.append(tool.serialize())
+        session.commit()
+        return result
     response = requests.get(f'https://bio.tools/api/tool/?{coll_id}{topic}&format=json').json()
     count_api = response['count'] - count_db
     if count_api == 0:
@@ -204,21 +231,23 @@ def get_tools_from_api(coll_id, topic, count_db):
     session.commit()
     return result
 
-def get_tools_from_db(coll_id, topic):
+def get_tools_from_db(coll_id, topic, tools_list):
     result = []
-    coll_id_result = select(db.tools).where(db.tools.bio_id == db.collection_ids.bio_id, db.collection_ids.coll_id == coll_id)
-    topic_result = select(db.tools).where(db.tools.bio_id == db.topics.bio_id, db.topics.term == topic)
-    query = intersect(coll_id_result, topic_result)
-    if coll_id and not topic:
-        query = intersect(coll_id_result)
-    elif not coll_id and topic:
-        query = intersect(topic_result)
-    for id in session.scalars(query):
-        tool_select = select(db.tools).where(db.tools.bio_id == id)
-        for tool in session.scalars(tool_select):
-            print(f'Processing {tool.bio_id} from DB')
-            get_lists_for_tool(tool)
-            result.append(tool.serialize())
+    query = select(db.tools).where(db.tools.bio_id == db.collection_ids.bio_id, db.collection_ids.coll_id == coll_id)
+    if topic:
+        query = select(db.tools).where(db.tools.bio_id == db.topics.bio_id, db.topics.term == topic)
+    elif tools_list:
+        for tool in tools_list.split(','):
+            tool_select = select(db.tools).where(db.tools.bio_id == tool)
+            for t in session.scalars(tool_select):
+                print(f'Processing {t.bio_id} from DB (list)')
+                get_lists_for_tool(t)
+                result.append(t.serialize())
+        return result
+    for tool in session.scalars(query):
+        print(f'Processing {tool.bio_id} from DB')
+        get_lists_for_tool(tool)
+        result.append(tool.serialize())
     return result
 
 def show_only_names(tools, only_names):
@@ -242,18 +271,24 @@ def get_existing_queries():
 def get_parameters():
     existing_queries = get_existing_queries() 
     if request.method == "POST":
+        non_empty = 0
         coll_id_form = request.form.get("coll_id")
         topic_form = request.form.get("topic")
-        if not coll_id_form and not topic_form:
+        tools_list_form = request.form.get("tools_list")
+        for item in [coll_id_form, topic_form, tools_list_form]:
+            if item:
+                non_empty += 1
+        if non_empty != 1:
             return render_template("get_parameters.html")
         only_names_form = 'off' if not request.form.get('only_names') else 'on'
-        if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, only_names=only_names_form).first()):
+        if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form).first()):
             return render_template("get_parameters.html", content=existing_queries)  
-        new_query = db.queries(collection_id=coll_id_form, topic=topic_form, only_names=only_names_form)
+        new_query = db.queries(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form)
         session.add(new_query)
         session.commit()
         existing_queries = get_existing_queries()
-        return render_template("get_parameters.html", content=existing_queries)   
+        # return render_template("get_parameters.html", content=existing_queries)   
+        return get_tools(coll_id_form, topic_form, tools_list_form, only_names_form) # For testing
     return render_template("get_parameters.html", content=existing_queries)
 
 @app.route("/data", methods=["POST"])
@@ -266,15 +301,15 @@ def get_data_from_frontend():
         query = None
         for q in session.scalars(query_select):
             query = q
-        return get_tools(query.collection_id, query.topic, query.only_names)
+        return get_tools(query.collection_id, query.topic, query.tools_list, query.only_names)
 
-def get_tools(coll_id, topic, only_names):
-    result_db = get_tools_from_db(coll_id, topic)
+def get_tools(coll_id, topic, tools_list, only_names):
+    result_db = get_tools_from_db(coll_id, topic, tools_list)
     count_db = len(result_db)
     print(f'TOOLS FROM DB:{count_db}')
     coll_id = f'&collectionID=\"{coll_id}\"' if coll_id else ''
     topic = f'&topic=\"{topic}\"' if topic else ''
-    result_api = get_tools_from_api(coll_id, topic, count_db)
+    result_api = get_tools_from_api(coll_id, topic, tools_list, count_db)
     print(f'TOOLS FROM API:{len(result_api)}')
     result_db.extend(result_api)
     result = show_only_names(result_db, only_names)
