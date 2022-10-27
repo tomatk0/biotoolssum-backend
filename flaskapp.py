@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 import math
 from flask_cors import CORS, cross_origin
+import random
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -76,6 +77,8 @@ def add_years(citations, doi):
         year = str(item['pubYear'])
         years_dict[year] = years_dict.get(year, 0) + 1
     for key, val in years_dict.items():
+        if bool(session.query(db.years).filter_by(doi=doi, year=key, count=val).first()):
+            return
         new_year = db.years(doi=doi, year=key, count=val)
         session.add(new_year)
     session.commit()
@@ -118,8 +121,6 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
 def add_publications_and_years(publications, bio_id):
     for publication in publications:
         pub_doi = publication['doi']
-        if bool(session.query(db.publications).filter_by(doi=pub_doi).first()):
-            continue
         pmid = publication['pmid']
         pmcid = publication['pmcid']
         if pub_doi:
@@ -129,10 +130,14 @@ def add_publications_and_years(publications, bio_id):
         else:
             response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmcid}&format=json').json()
         result = response['resultList']['result']
-        if result and not pub_doi:
-            pub_doi = result[0]['doi']
-        if result and not pmid:
-            pmid = result[0]['id']
+        if result:
+            for item in result:
+                if 'doi' in item:
+                    pub_doi = item['doi']
+                if 'id' in item:
+                    pmid = item['id']
+        if not pub_doi or bool(session.query(db.publications).filter_by(doi=pub_doi).first()):
+            continue
         response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
         add_years(response['citationList'], pub_doi)
         new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid)
@@ -194,10 +199,9 @@ def get_lists_for_tool(tool):
     tool.elixir_nodes = get_data_from_table(tool, db.elixir_nodes)
     tool.elixir_communities = get_data_from_table(tool, db.elixir_communities)
 
-def get_tools_from_api(coll_id, topic, tools_list, count_db):
+def get_tools_from_given_list(tools_list):
     result = []
-    if tools_list:
-        for t in tools_list.split(','):
+    for t in tools_list.split(','):
             response = requests.get(f'https://bio.tools/api/tool/?&biotoolsID=\"{t}\"&format=json').json()
             if not response['list']:
                 continue
@@ -210,8 +214,13 @@ def get_tools_from_api(coll_id, topic, tools_list, count_db):
             session.add(tool)
             get_lists_for_tool(tool)
             result.append(tool.serialize())
-        session.commit()
-        return result
+    session.commit()
+    return result
+
+def get_tools_from_api(coll_id, topic, tools_list, count_db):
+    result = []
+    if tools_list:
+        return get_tools_from_given_list(tools_list)
     response = requests.get(f'https://bio.tools/api/tool/?{coll_id}{topic}&format=json').json()
     count_api = response['count'] - count_db
     if count_api == 0:
@@ -233,9 +242,9 @@ def get_tools_from_api(coll_id, topic, tools_list, count_db):
 
 def get_tools_from_db(coll_id, topic, tools_list):
     result = []
-    query = select(db.tools).where(db.tools.bio_id == db.collection_ids.bio_id, db.collection_ids.coll_id == coll_id)
+    query = select(db.tools).where(db.tools.bio_id == db.collection_ids.bio_id, db.collection_ids.coll_id.ilike(coll_id))
     if topic:
-        query = select(db.tools).where(db.tools.bio_id == db.topics.bio_id, db.topics.term == topic)
+        query = select(db.tools).where(db.tools.bio_id == db.topics.bio_id, db.topics.term.ilike(topic))
     elif tools_list:
         for tool in tools_list.split(','):
             tool_select = select(db.tools).where(db.tools.bio_id == tool)
@@ -267,6 +276,12 @@ def get_existing_queries():
         result.append(query.serialize())
     return result
 
+def create_hash():
+    result = ''
+    for _ in range(10):
+        result += chr(random.randint(48, 122))
+    return result
+
 @app.route("/", methods=["POST", "GET"])
 def get_parameters():
     existing_queries = get_existing_queries() 
@@ -283,7 +298,7 @@ def get_parameters():
         only_names_form = 'off' if not request.form.get('only_names') else 'on'
         if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form).first()):
             return render_template("get_parameters.html", content=existing_queries)  
-        new_query = db.queries(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form)
+        new_query = db.queries(id=create_hash(), collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form)
         session.add(new_query)
         session.commit()
         existing_queries = get_existing_queries()

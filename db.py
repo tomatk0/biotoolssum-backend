@@ -218,7 +218,7 @@ class elixir_communities(base):
 class queries(base):
     __tablename__ = 'queries'
 
-    id = Column(Integer, primary_key=True)
+    id = Column(String, primary_key=True)
     collection_id = Column(String)
     topic = Column(String)
     tools_list = Column(String)
