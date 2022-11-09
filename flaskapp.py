@@ -62,20 +62,23 @@ def add_functions(functions, bio_id):
         session.add(new_function)
     session.commit()
 
-
 def add_platforms(platforms, bio_id):
     for name in platforms:
         new_platform = db.platforms(bio_id=bio_id, name=name)
         session.add(new_platform)
     session.commit()
 
-def add_years(citations, doi):
+def add_years(doi, pmid):
+    response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
+    if response['hitCount'] < 1:
+        return
+    number_of_pages = (response['hitCount'] // 1000) + 1
     years_dict = {}
-    if not citations['citation']:
-        return 
-    for item in citations['citation']:
-        year = str(item['pubYear'])
-        years_dict[year] = years_dict.get(year, 0) + 1
+    for i in range(1, number_of_pages + 1):
+        response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/{i}/1000/json').json()
+        for item in response['citationList']['citation']:
+            year = str(item['pubYear'])
+            years_dict[year] = years_dict.get(year, 0) + 1
     for key, val in years_dict.items():
         if bool(session.query(db.years).filter_by(doi=doi, year=key, count=val).first()):
             return
@@ -138,8 +141,7 @@ def add_publications_and_years(publications, bio_id):
                     pmid = item['id']
         if not pub_doi or bool(session.query(db.publications).filter_by(doi=pub_doi).first()):
             continue
-        response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
-        add_years(response['citationList'], pub_doi)
+        add_years(pub_doi, pmid)
         new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid)
         session.add(new_publication)
     session.commit()
@@ -302,8 +304,8 @@ def get_parameters():
         session.add(new_query)
         session.commit()
         existing_queries = get_existing_queries()
-        # return render_template("get_parameters.html", content=existing_queries)   
-        return get_tools(coll_id_form, topic_form, tools_list_form, only_names_form) # For testing
+        _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form) # For testing
+        return render_template("get_parameters.html", content=existing_queries)   
     return render_template("get_parameters.html", content=existing_queries)
 
 @app.route("/data", methods=["POST"])
