@@ -16,7 +16,11 @@ Session = sessionmaker(bind=db.engine)
 session = Session()
 
 def add_latest_version(versions):
-    return versions[0] if versions else ''
+    if not versions:
+        return ''
+    if versions[0][0] == 'v':
+        return versions[0]
+    return 'v' + versions[0]
 
 def add_tool_types(tool_types, bio_id):
     already_used = []
@@ -133,16 +137,22 @@ def add_publications_and_years(publications, bio_id):
         else:
             response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmcid}&format=json').json()
         result = response['resultList']['result']
+        source = ''
         if result:
             for item in result:
                 if 'doi' in item:
                     pub_doi = item['doi']
                 if 'id' in item:
                     pmid = item['id']
+                if 'source' in item:
+                    source = item['source'] 
         if not pub_doi or bool(session.query(db.publications).filter_by(doi=pub_doi).first()):
             continue
+        citations_source = ''
+        if pmid:
+            citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}'
         add_years(pub_doi, pmid)
-        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid)
+        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source)
         session.add(new_publication)
     session.commit()
 
