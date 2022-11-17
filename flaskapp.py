@@ -126,37 +126,38 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
     session.commit()
 
 def add_publications_and_years(publications, bio_id):
+    citation_count = 0
     for publication in publications:
         pub_doi = publication['doi']
         pmid = publication['pmid']
-        pmcid = publication['pmcid']
         if pub_doi:
             response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pub_doi}&format=json').json()
         elif pmid:
             response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmid}&format=json').json()
-        else:
-            response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmcid}&format=json').json()
-        result = response['resultList']['result']
+        result = response['resultList']['result'] if response['resultList'] else []
         source = ''
-        if result:
-            for item in result:
-                if 'doi' in item:
-                    pub_doi = item['doi']
-                if 'id' in item:
-                    pmid = item['id']
-                if 'source' in item:
-                    source = item['source'] 
+        for item in result:
+            source = item['source']
+            if 'doi' in item and item['doi'] == pub_doi:
+                pmid = item['pmid'] if 'pmid' in item else pmid
+                break
+            if 'id' in item and item['pmid'] == pmid:
+                pub_doi = item['doi'] if 'doi' in item else pub_doi
+                break
+        if pmid:
+            response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
+            citation_count += response['hitCount']
         if not pub_doi or bool(session.query(db.publications).filter_by(doi=pub_doi).first()):
             continue
-        citations_source = ''
-        if pmid:
-            citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}'
+        citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}' if pmid else ''
         add_years(pub_doi, pmid)
-        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source)
+        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, citations_source=citations_source)
         session.add(new_publication)
     session.commit()
+    return citation_count
 
 def add_tool(item, id):
+    name = item['name']
     version = add_latest_version(item['version'])
     bio_link = f'https://bio.tools/{id}'
     homepage = item['homepage']
@@ -170,12 +171,13 @@ def add_tool(item, id):
     add_input_output(item['function'], id, 'input', db.inputs)
     add_input_output(item['function'], id, 'output', db.outputs)
     license = item['license']
+    documentation = item['documentation'][0]['url'] if item['documentation'] else ''
     add_collection_ids(item['collectionID'], id)
     add_elixir_platforms_nodes_communities(item['elixirPlatform'], id, db.elixir_platforms)
     add_elixir_platforms_nodes_communities(item['elixirNode'], id, db.elixir_nodes)
     add_elixir_platforms_nodes_communities(item['elixirCommunity'], id, db.elixir_communities)
-    add_publications_and_years(item['publication'], id)
-    tool = db.tools(bio_id=id, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license)
+    citation_count = add_publications_and_years(item['publication'], id)
+    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count, documentation=documentation)
     return tool
         
 def get_publications_and_years_from_table(tool):
@@ -314,7 +316,7 @@ def get_parameters():
         session.add(new_query)
         session.commit()
         existing_queries = get_existing_queries()
-        _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form) # For testing
+        _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form)
         return render_template("get_parameters.html", content=existing_queries)   
     return render_template("get_parameters.html", content=existing_queries)
 

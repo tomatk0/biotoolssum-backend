@@ -2,10 +2,10 @@ from sqlalchemy import create_engine
 from sqlalchemy import Column, String, Integer
 from sqlalchemy.ext.declarative import declarative_base
 
-engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
-                        connect_args={'check_same_thread': False})
-# engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+# engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
 #                         connect_args={'check_same_thread': False})
+engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+                        connect_args={'check_same_thread': False})
 
 base = declarative_base()
 
@@ -13,12 +13,15 @@ class tools(base):
     __tablename__ = 'tools'
 
     bio_id = Column(String, primary_key=True)
+    name = Column(String)
     version = Column(String)
     bio_link = Column(String)
     homepage = Column(String)
     description = Column(String)
     maturity = Column(String)
     license = Column(String)
+    citation_count = Column(Integer)
+    documentation = Column(String)
     publications = []
     functions = []
     topics = []
@@ -35,12 +38,15 @@ class tools(base):
     def serialize(self):
         return {
                 'bio_id': self.bio_id,
+                'name': self.name,
                 'version': self.version,
                 'bio_link': self.bio_link,
                 'homepage': self.homepage,
                 'description': self.description,
                 'maturity': self.maturity,
                 'license': self.license,
+                'citation_count': self.citation_count,
+                'documentation': self.documentation,
                 'publications': self.publications,
                 'functions': self.functions,
                 'topics': self.topics,
@@ -66,7 +72,6 @@ class publications(base):
     doi = Column(String, primary_key=True)
     bio_id = Column(String, primary_key=True)
     pmid = Column(String)
-    pmcid = Column(String)
     citations_source = Column(String)
     citations_list = []
 
@@ -74,7 +79,6 @@ class publications(base):
         return {
                 'doi': self.doi,
                 'pmid': self.pmid,
-                'pmcid': self.pmcid,
                 'citations_source': self.citations_source,
                 'citations_list': self.citations_list
                }
