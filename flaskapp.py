@@ -128,28 +128,30 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
 def add_publications_and_years(publications, bio_id):
     citation_count = 0
     for publication in publications:
-        pub_doi = publication['doi']
+        pub_doi = '' if not publication['doi'] else publication['doi'].lower()
         pmid = publication['pmid']
         if pub_doi:
-            response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pub_doi}&format=json').json()
+            response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pub_doi}&pageSize=1000&format=json').json()
         elif pmid:
-            response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmid}&format=json').json()
+            response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmid}&pageSize=1000&format=json').json()
         result = response['resultList']['result'] if response['resultList'] else []
         source = ''
         for item in result:
             source = item['source']
             if 'doi' in item and item['doi'] == pub_doi:
-                pmid = item['pmid'] if 'pmid' in item else pmid
+                pmid = item['id'] if 'id' in item else pmid
                 break
-            if 'id' in item and item['pmid'] == pmid:
+            if 'id' in item and item['id'] == pmid:
                 pub_doi = item['doi'] if 'doi' in item else pub_doi
                 break
+        print(f"Tool: {bio_id}, publication: {pub_doi}, id: {pmid}")
         if pmid:
             response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
             citation_count += response['hitCount']
         if not pub_doi or bool(session.query(db.publications).filter_by(doi=pub_doi).first()):
             continue
         citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}' if pmid else ''
+        print(f"Citations source: {citations_source}")
         add_years(pub_doi, pmid)
         new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, citations_source=citations_source)
         session.add(new_publication)
