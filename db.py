@@ -2,10 +2,10 @@ from sqlalchemy import create_engine
 from sqlalchemy import Column, String, Integer
 from sqlalchemy.ext.declarative import declarative_base
 
-# engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
-#                         connect_args={'check_same_thread': False})
-engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
                         connect_args={'check_same_thread': False})
+# engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+#                         connect_args={'check_same_thread': False})
 
 base = declarative_base()
 
@@ -72,6 +72,7 @@ class publications(base):
     doi = Column(String, primary_key=True)
     bio_id = Column(String, primary_key=True)
     pmid = Column(String)
+    pmcid = Column(String)
     citations_source = Column(String)
     citations_list = []
 
@@ -79,6 +80,7 @@ class publications(base):
         return {
                 'doi': self.doi,
                 'pmid': self.pmid,
+                'pmcid': self.pmcid,
                 'citations_source': self.citations_source,
                 'citations_list': self.citations_list
                }

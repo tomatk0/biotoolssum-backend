@@ -74,8 +74,9 @@ def add_platforms(platforms, bio_id):
 
 def add_years(doi, pmid):
     response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
-    if response['hitCount'] < 1:
-        return
+    citation_count = response['hitCount']
+    if citation_count < 1:
+        return 0
     number_of_pages = (response['hitCount'] // 1000) + 1
     years_dict = {}
     for i in range(1, number_of_pages + 1):
@@ -85,10 +86,11 @@ def add_years(doi, pmid):
             years_dict[year] = years_dict.get(year, 0) + 1
     for key, val in years_dict.items():
         if bool(session.query(db.years).filter_by(doi=doi, year=key, count=val).first()):
-            return
+            return citation_count
         new_year = db.years(doi=doi, year=key, count=val)
         session.add(new_year)
     session.commit()
+    return citation_count
 
 def add_input_output(functions, bio_id, input_or_output, table):
     if not functions:
@@ -130,6 +132,7 @@ def add_publications_and_years(publications, bio_id):
     for publication in publications:
         pub_doi = '' if not publication['doi'] else publication['doi'].lower()
         pmid = publication['pmid']
+        pmcid = publication['pmcid']
         if pub_doi:
             response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pub_doi}&pageSize=1000&format=json').json()
         elif pmid:
@@ -141,19 +144,20 @@ def add_publications_and_years(publications, bio_id):
             if 'doi' in item and item['doi'] == pub_doi:
                 pmid = item['id'] if 'id' in item else pmid
                 break
-            if 'id' in item and item['id'] == pmid:
+            if 'id' in item and (item['id'] == pmid or item['id'] == pmcid):
                 pub_doi = item['doi'] if 'doi' in item else pub_doi
                 break
-        print(f"Tool: {bio_id}, publication: {pub_doi}, id: {pmid}")
-        if pmid:
-            response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
-            citation_count += response['hitCount']
-        if not pub_doi or bool(session.query(db.publications).filter_by(doi=pub_doi).first()):
+        if not pub_doi:
+            print(f"PUB DOI MISSING {bio_id}")
             continue
-        citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}' if pmid else ''
-        print(f"Citations source: {citations_source}")
-        add_years(pub_doi, pmid)
-        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, citations_source=citations_source)
+        if bool(session.query(db.publications).filter_by(doi=pub_doi, bio_id=bio_id, pmid=pmid).first()):
+            print(f"THE SAME DOI BIO ID AND PMID ARE IN DB ALREADY {bio_id}")
+            continue
+        citations_source = ''
+        if pmid:
+            citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}'
+            citation_count += add_years(pub_doi, pmid)
+        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source)
         session.add(new_publication)
     session.commit()
     return citation_count
