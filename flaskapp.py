@@ -6,6 +6,7 @@ from sqlalchemy import select
 import math
 from flask_cors import CORS, cross_origin
 import random
+from wos import impacts
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -162,6 +163,29 @@ def add_publications_and_years(publications, bio_id):
     session.commit()
     return citation_count
 
+def add_availability(id):
+    response = requests.get(f'https://openebench.bsc.es/monitor/rest/aggregate?id={id}').json()
+    if not response or 'entities' not in response[0]:
+        return 0
+    entities = response[0]['entities']
+    link = ''
+    for entity in entities:
+        if entity['type'] == 'web':
+            link = entity['tools'][-1]['@id']
+            break
+        elif entity['type']:
+            link = entity['tools'][-1]['@id']
+    print(link)
+    if not link:
+        return 0
+    split_link = link.split('/')
+    response = requests.get(f'https://openebench.bsc.es/monitor/rest/homepage/{split_link[-3]}/{split_link[-2]}/{split_link[-1]}?limit=8').json()
+    codes_200 = 0
+    for item in response:
+        if item['code'] == 200:
+            codes_200 += 1
+    return round(100 * (codes_200/8))
+    
 def add_tool(item, id):
     name = item['name']
     version = add_latest_version(item['version'])
@@ -177,13 +201,14 @@ def add_tool(item, id):
     add_input_output(item['function'], id, 'input', db.inputs)
     add_input_output(item['function'], id, 'output', db.outputs)
     license = item['license']
+    availability = add_availability(id)
     documentation = item['documentation'][0]['url'] if item['documentation'] else ''
     add_collection_ids(item['collectionID'], id)
     add_elixir_platforms_nodes_communities(item['elixirPlatform'], id, db.elixir_platforms)
     add_elixir_platforms_nodes_communities(item['elixirNode'], id, db.elixir_nodes)
     add_elixir_platforms_nodes_communities(item['elixirCommunity'], id, db.elixir_communities)
     citation_count = add_publications_and_years(item['publication'], id)
-    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count, documentation=documentation)
+    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count, availability = availability, documentation=documentation)
     return tool
         
 def get_publications_and_years_from_table(tool):

@@ -1,11 +1,11 @@
 from sqlalchemy import create_engine
-from sqlalchemy import Column, String, Integer
+from sqlalchemy import Column, String, Integer, Float
 from sqlalchemy.ext.declarative import declarative_base
 
-engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
-                        connect_args={'check_same_thread': False})
-# engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+# engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
 #                         connect_args={'check_same_thread': False})
+engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+                        connect_args={'check_same_thread': False})
 
 base = declarative_base()
 
@@ -21,6 +21,8 @@ class tools(base):
     maturity = Column(String)
     license = Column(String)
     citation_count = Column(Integer)
+    impact_factor = Column(Float)
+    availability = Column(Integer)
     documentation = Column(String)
     publications = []
     functions = []
@@ -46,6 +48,8 @@ class tools(base):
                 'maturity': self.maturity,
                 'license': self.license,
                 'citation_count': self.citation_count,
+                'impact_factor': self.impact_factor,
+                'availability': self.availability,
                 'documentation': self.documentation,
                 'publications': self.publications,
                 'functions': self.functions,
