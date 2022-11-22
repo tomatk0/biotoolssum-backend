@@ -22,6 +22,7 @@ class tools(base):
     license = Column(String)
     citation_count = Column(Integer)
     impact_factor = Column(Float)
+    journals = Column(String)
     availability = Column(Integer)
     documentation = Column(String)
     publications = []
@@ -49,6 +50,7 @@ class tools(base):
                 'license': self.license,
                 'citation_count': self.citation_count,
                 'impact_factor': self.impact_factor,
+                'journals': self.journals,
                 'availability': self.availability,
                 'documentation': self.documentation,
                 'publications': self.publications,

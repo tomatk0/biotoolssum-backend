@@ -130,6 +130,8 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
 
 def add_publications_and_years(publications, bio_id):
     citation_count = 0
+    impact_factor = 0
+    journals = ''
     for publication in publications:
         pub_doi = '' if not publication['doi'] else publication['doi'].lower()
         pmid = publication['pmid']
@@ -158,10 +160,14 @@ def add_publications_and_years(publications, bio_id):
         if pmid:
             citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}'
             citation_count += add_years(pub_doi, pmid)
+        journal = '' if not publication['metadata'] else publication['metadata']['journal']
+        journals += f'{journal}, ' if journal else ''
+        impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
+        impact_factor += impact         
         new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source)
         session.add(new_publication)
     session.commit()
-    return citation_count
+    return citation_count, impact_factor, journals[:-2]
 
 def add_availability(id):
     response = requests.get(f'https://openebench.bsc.es/monitor/rest/aggregate?id={id}').json()
@@ -175,7 +181,6 @@ def add_availability(id):
             break
         elif entity['type']:
             link = entity['tools'][-1]['@id']
-    print(link)
     if not link:
         return 0
     split_link = link.split('/')
@@ -207,8 +212,8 @@ def add_tool(item, id):
     add_elixir_platforms_nodes_communities(item['elixirPlatform'], id, db.elixir_platforms)
     add_elixir_platforms_nodes_communities(item['elixirNode'], id, db.elixir_nodes)
     add_elixir_platforms_nodes_communities(item['elixirCommunity'], id, db.elixir_communities)
-    citation_count = add_publications_and_years(item['publication'], id)
-    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count, availability = availability, documentation=documentation)
+    citation_count, impact_factor, journals = add_publications_and_years(item['publication'], id)
+    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, documentation=documentation)
     return tool
         
 def get_publications_and_years_from_table(tool):
