@@ -131,7 +131,7 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
 def add_publications_and_years(publications, bio_id):
     citation_count = 0
     impact_factor = 0
-    journals = ''
+    journals = {}
     for publication in publications:
         pub_doi = '' if not publication['doi'] else publication['doi'].lower()
         pmid = publication['pmid']
@@ -161,13 +161,14 @@ def add_publications_and_years(publications, bio_id):
             citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}'
             citation_count += add_years(pub_doi, pmid)
         journal = '' if not publication['metadata'] else publication['metadata']['journal']
-        journals += f'{journal}, ' if journal else ''
+        if journal:
+            journals.add(journal)
         impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
         impact_factor += impact         
         new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source)
         session.add(new_publication)
     session.commit()
-    return citation_count, impact_factor, journals[:-2]
+    return citation_count, impact_factor, ', '.join(list(journals))
 
 def add_availability(id):
     response = requests.get(f'https://openebench.bsc.es/monitor/rest/aggregate?id={id}').json()
@@ -368,7 +369,7 @@ def get_data_from_frontend():
         query = None
         for q in session.scalars(query_select):
             query = q
-        return get_tools(query.collection_id, query.topic, query.tools_list, query.only_names)
+        return get_tools(query.collection_id, query.topic, query.tools_list, query.only_names, query.display_type)
 
 def add_matrix_queries(coll_id, topic):
     matrix_queries = ['dna sequence', 'dna secondary structure', 'dna structure', 'genomics', 'rna sequence', 'rna secondary structure', 'rna structure', 'rna omics', 'protein sequence', 'protein secondary structure', 'protein structure', 'protein omics', 'small molecule primary sequence', 'small molecule secondary structure', 'small molecule structure', 'small molecule omics']
@@ -380,6 +381,8 @@ def add_matrix_queries(coll_id, topic):
             tools = response['list']
             for tool in tools:
                 id = tool['biotoolsID']
+                if bool(session.query(db.matrix_queries).filter_by(bio_id=id, matrix_query=query).first()):
+                    continue
                 new_query = db.matrix_queries(bio_id=id, matrix_query=query)
                 session.add(new_query)
             page = response['next']
@@ -391,10 +394,10 @@ def get_tools(coll_id, topic, tools_list, only_names, display_type):
     print(f'TOOLS FROM DB:{count_db}')
     coll_id = f'&collectionID=\"{coll_id}\"' if coll_id else ''
     topic = f'&topic=\"{topic}\"' if topic else ''
-    if display_type == 'matrix':
-        add_matrix_queries(coll_id, topic)
     result_api = get_tools_from_api(coll_id, topic, tools_list, count_db)
     print(f'TOOLS FROM API:{len(result_api)}')
+    if display_type == 'matrix':
+        add_matrix_queries(coll_id, topic)
     result_db.extend(result_api)
     result = show_only_names(result_db, only_names)
     return jsonify(result)
