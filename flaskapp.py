@@ -332,6 +332,9 @@ def create_hash():
         result += chr(random.randint(48, 122))
     return result
 
+def add_matrix_queries():
+    pass
+
 @app.route("/", methods=["POST", "GET"])
 def get_parameters():
     existing_queries = get_existing_queries() 
@@ -353,6 +356,9 @@ def get_parameters():
         session.commit()
         existing_queries = get_existing_queries()
         _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form)
+        radio_button = request.form.get("option")
+        if radio_button == 'matrix':
+            add_matrix_queries()
         return render_template("get_parameters.html", content=existing_queries)   
     return render_template("get_parameters.html", content=existing_queries)
 
