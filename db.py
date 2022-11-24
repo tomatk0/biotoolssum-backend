@@ -25,6 +25,7 @@ class tools(base):
     journals = Column(String)
     availability = Column(Integer)
     documentation = Column(String)
+    matrix_queries = []
     publications = []
     functions = []
     topics = []
@@ -53,6 +54,7 @@ class tools(base):
                 'journals': self.journals,
                 'availability': self.availability,
                 'documentation': self.documentation,
+                'matrix_queries': self.matrix_queries,
                 'publications': self.publications,
                 'functions': self.functions,
                 'topics': self.topics,
@@ -236,6 +238,7 @@ class queries(base):
     collection_id = Column(String)
     topic = Column(String)
     tools_list = Column(String)
+    display_type = Column(String)
     only_names = Column(String)
 
     def serialize(self):
@@ -243,19 +246,34 @@ class queries(base):
             return {
                 'id': self.id,
                 'collection_id': self.collection_id,
-                'only_names': self.only_names
+                'only_names': self.only_names,
+                'display_type': self.display_type
             }
         elif self.topic:
             return {
                 'id': self.id,
                 'topic': self.topic,
-                'only_names': self.only_names
+                'only_names': self.only_names,
+                'display_type': self.display_type
             }
         elif self.tools_list:
             return {
                 'id': self.id,
                 'tools_list': self.tools_list,
-                'only_names': self.only_names
+                'only_names': self.only_names,
+                'display_type': self.display_type
             }
+
+class matrix_queries(base):
+    __tablename__ = 'matrix_queries'
+
+    bio_id = Column(String, primary_key=True)
+    matrix_query = Column(String, primary_key=True)
+
+    def serialize(self):
+        return {
+                'matrix_query': self.matrix_query
+        }
+
 
 base.metadata.create_all(engine)

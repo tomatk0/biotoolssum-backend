@@ -236,6 +236,7 @@ def get_data_from_table(tool, table):
     return result
 
 def get_lists_for_tool(tool):
+    tool.matrix_queries = get_data_from_table(tool, db.matrix_queries)
     tool.publications = get_publications_and_years_from_table(tool)
     tool.functions = get_data_from_table(tool, db.functions)
     tool.topics = get_data_from_table(tool, db.topics)
@@ -332,9 +333,6 @@ def create_hash():
         result += chr(random.randint(48, 122))
     return result
 
-def add_matrix_queries():
-    pass
-
 @app.route("/", methods=["POST", "GET"])
 def get_parameters():
     existing_queries = get_existing_queries() 
@@ -349,16 +347,14 @@ def get_parameters():
         if non_empty != 1:
             return render_template("get_parameters.html")
         only_names_form = 'off' if not request.form.get('only_names') else 'on'
-        if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form).first()):
+        display_type = request.form.get('option')
+        if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, display_type=display_type, only_names=only_names_form).first()):
             return render_template("get_parameters.html", content=existing_queries)  
-        new_query = db.queries(id=create_hash(), collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form)
+        new_query = db.queries(id=create_hash(), collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, display_type=display_type, only_names=only_names_form)
         session.add(new_query)
         session.commit()
         existing_queries = get_existing_queries()
-        _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form)
-        radio_button = request.form.get("option")
-        if radio_button == 'matrix':
-            add_matrix_queries()
+        _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form, display_type)
         return render_template("get_parameters.html", content=existing_queries)   
     return render_template("get_parameters.html", content=existing_queries)
 
@@ -374,12 +370,29 @@ def get_data_from_frontend():
             query = q
         return get_tools(query.collection_id, query.topic, query.tools_list, query.only_names)
 
-def get_tools(coll_id, topic, tools_list, only_names):
+def add_matrix_queries(coll_id, topic):
+    matrix_queries = ['dna sequence', 'dna secondary structure', 'dna structure', 'genomics', 'rna sequence', 'rna secondary structure', 'rna structure', 'rna omics', 'protein sequence', 'protein secondary structure', 'protein structure', 'protein omics', 'small molecule primary sequence', 'small molecule secondary structure', 'small molecule structure', 'small molecule omics']
+    coll_or_topic = f'&collectionID=\"{coll_id}\"' if coll_id else f'&topic=\"{topic}\"'
+    for query in matrix_queries:
+        page = "?page=1"
+        while page:
+            response = requests.get(f'https://bio.tools/api/tool/{page}&q={query}{coll_or_topic}&format=json').json()
+            tools = response['list']
+            for tool in tools:
+                id = tool['biotoolsID']
+                new_query = db.matrix_queries(bio_id=id, matrix_query=query)
+                session.add(new_query)
+            page = response['next']
+    session.commit()
+            
+def get_tools(coll_id, topic, tools_list, only_names, display_type):
     result_db = get_tools_from_db(coll_id, topic, tools_list)
     count_db = len(result_db)
     print(f'TOOLS FROM DB:{count_db}')
     coll_id = f'&collectionID=\"{coll_id}\"' if coll_id else ''
     topic = f'&topic=\"{topic}\"' if topic else ''
+    if display_type == 'matrix':
+        add_matrix_queries(coll_id, topic)
     result_api = get_tools_from_api(coll_id, topic, tools_list, count_db)
     print(f'TOOLS FROM API:{len(result_api)}')
     result_db.extend(result_api)
