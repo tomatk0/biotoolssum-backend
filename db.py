@@ -2,10 +2,10 @@ from sqlalchemy import create_engine
 from sqlalchemy import Column, String, Integer, Float
 from sqlalchemy.ext.declarative import declarative_base
 
-engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
-                        connect_args={'check_same_thread': False})
-# engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+# engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
 #                         connect_args={'check_same_thread': False})
+engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
+                        connect_args={'check_same_thread': False})
 
 base = declarative_base()
 
@@ -25,6 +25,11 @@ class tools(base):
     journals = Column(String)
     availability = Column(Integer)
     documentation = Column(String)
+    github_url = Column(String)
+    github_created_at = Column(String)
+    github_updated_at = Column(String)
+    github_forks = Column(Integer)
+    github_contributions = Column(Integer)
     matrix_queries = []
     publications = []
     functions = []

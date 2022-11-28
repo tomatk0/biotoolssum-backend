@@ -192,6 +192,24 @@ def add_availability(id):
             codes_200 += 1
     return round(100 * (codes_200/8))
     
+def add_github_info(link):
+    github_url = ''
+    for item in link:
+        if 'Repository' in item['type'] and 'github' in item['url']:
+            github_url = item['url']
+    if not github_url:
+        return '', '', '', 0, 0
+    owner_and_repo = github_url.split('/')[-2:]
+    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}').json()
+    if 'message' in response:
+        return github_url, '', '', 0, 0
+    created_at = '' if 'created_at' not in response else response['created_at'].split('T')[0]
+    updated_at = '' if 'updated_at' not in response else response['updated_at'].split('T')[0]
+    forks = 0 if 'forks' not in response else response['forks']
+    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}/contributors').json()
+    contributions = 0 if not response or 'contributions' not in response[0] else response[0]['contributions']
+    return github_url, created_at, updated_at, forks, contributions
+
 def add_tool(item, id):
     name = item['name']
     version = add_latest_version(item['version'])
@@ -214,7 +232,8 @@ def add_tool(item, id):
     add_elixir_platforms_nodes_communities(item['elixirNode'], id, db.elixir_nodes)
     add_elixir_platforms_nodes_communities(item['elixirCommunity'], id, db.elixir_communities)
     citation_count, impact_factor, journals = add_publications_and_years(item['publication'], id)
-    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, documentation=documentation)
+    url, created_at, updated_at, forks, contributions = add_github_info(item['link'])
+    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, documentation=documentation, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions)
     return tool
         
 def get_publications_and_years_from_table(tool):
