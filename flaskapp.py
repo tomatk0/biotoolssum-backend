@@ -131,7 +131,7 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
 def add_publications_and_years(publications, bio_id):
     citation_count = 0
     impact_factor = 0
-    journals = {}
+    journals = set()
     for publication in publications:
         pub_doi = '' if not publication['doi'] else publication['doi'].lower()
         pmid = publication['pmid']
@@ -168,7 +168,7 @@ def add_publications_and_years(publications, bio_id):
         new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source)
         session.add(new_publication)
     session.commit()
-    return citation_count, impact_factor, ', '.join(list(journals))
+    return citation_count, round(impact_factor, 3), ', '.join(list(journals))
 
 def add_availability(id):
     response = requests.get(f'https://openebench.bsc.es/monitor/rest/aggregate?id={id}').json()
