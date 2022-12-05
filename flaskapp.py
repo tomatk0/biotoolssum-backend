@@ -199,14 +199,15 @@ def add_github_info(link):
             github_url = item['url']
     if not github_url:
         return '', '', '', 0, 0
+    github_url = github_url[:-1] if github_url[-1] == '/' else github_url
     owner_and_repo = github_url.split('/')[-2:]
-    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}').json()
+    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}', auth=('493043@mail.muni.cz', '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')).json()
     if 'message' in response:
         return github_url, '', '', 0, 0
     created_at = '' if 'created_at' not in response else response['created_at'].split('T')[0]
     updated_at = '' if 'updated_at' not in response else response['updated_at'].split('T')[0]
     forks = 0 if 'forks' not in response else response['forks']
-    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}/contributors').json()
+    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}/contributors', auth=('493043@mail.muni.cz', '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')).json()
     contributions = 0 if not response or 'contributions' not in response[0] else response[0]['contributions']
     return github_url, created_at, updated_at, forks, contributions
 
