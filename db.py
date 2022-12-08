@@ -1,5 +1,5 @@
 from sqlalchemy import create_engine
-from sqlalchemy import Column, String, Integer, Float
+from sqlalchemy import Column, String, Integer, Float, Date
 from sqlalchemy.ext.declarative import declarative_base
 
 # engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
@@ -30,6 +30,7 @@ class tools(base):
     github_updated_at = Column(String)
     github_forks = Column(Integer)
     github_contributions = Column(Integer)
+    last_updated = Column(Date)
     matrix_queries = []
     publications = []
     functions = []
@@ -87,6 +88,9 @@ class publications(base):
     pmid = Column(String)
     pmcid = Column(String)
     citations_source = Column(String)
+    journal = Column(String)
+    impact_factor = Column(Float)
+    citation_count = Column(Integer)
     citations_list = []
 
     def serialize(self):

@@ -7,6 +7,8 @@ import math
 from flask_cors import CORS, cross_origin
 import random
 from wos import impacts
+from datetime import date
+from common_functions import update_availability, update_github_info, update_version, get_doi_pmid_source, add_years
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -15,13 +17,6 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 
 Session = sessionmaker(bind=db.engine)
 session = Session()
-
-def add_latest_version(versions):
-    if not versions:
-        return ''
-    if versions[0][0] == 'v':
-        return versions[0]
-    return 'v' + versions[0]
 
 def add_tool_types(tool_types, bio_id):
     already_used = []
@@ -54,9 +49,9 @@ def add_topics(topics, bio_id):
     session.commit()
 
 def add_functions(functions, bio_id):
-    already_used = []
     if not functions:
         return
+    already_used = []
     for item in functions[0]['operation']:
         term = item['term']
         uri = item['uri']
@@ -72,26 +67,6 @@ def add_platforms(platforms, bio_id):
         new_platform = db.platforms(bio_id=bio_id, name=name)
         session.add(new_platform)
     session.commit()
-
-def add_years(doi, pmid):
-    response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
-    citation_count = response['hitCount']
-    if citation_count < 1:
-        return 0
-    number_of_pages = (response['hitCount'] // 1000) + 1
-    years_dict = {}
-    for i in range(1, number_of_pages + 1):
-        response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/{i}/1000/json').json()
-        for item in response['citationList']['citation']:
-            year = str(item['pubYear'])
-            years_dict[year] = years_dict.get(year, 0) + 1
-    for key, val in years_dict.items():
-        if bool(session.query(db.years).filter_by(doi=doi, year=key, count=val).first()):
-            return citation_count
-        new_year = db.years(doi=doi, year=key, count=val)
-        session.add(new_year)
-    session.commit()
-    return citation_count
 
 def add_input_output(functions, bio_id, input_or_output, table):
     if not functions:
@@ -136,20 +111,7 @@ def add_publications_and_years(publications, bio_id):
         pub_doi = '' if not publication['doi'] else publication['doi'].lower()
         pmid = publication['pmid']
         pmcid = publication['pmcid']
-        if pub_doi:
-            response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pub_doi}&pageSize=1000&format=json').json()
-        elif pmid:
-            response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmid}&pageSize=1000&format=json').json()
-        result = response['resultList']['result'] if response['resultList'] else []
-        source = ''
-        for item in result:
-            source = item['source']
-            if 'doi' in item and item['doi'] == pub_doi:
-                pmid = item['id'] if 'id' in item else pmid
-                break
-            if 'id' in item and (item['id'] == pmid or item['id'] == pmcid):
-                pub_doi = item['doi'] if 'doi' in item else pub_doi
-                break
+        pub_doi, pmid, source = get_doi_pmid_source(pub_doi, pmid, pmcid)
         if not pub_doi:
             print(f"PUB DOI MISSING {bio_id}")
             continue
@@ -159,61 +121,20 @@ def add_publications_and_years(publications, bio_id):
         citations_source = ''
         if pmid:
             citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}'
-            citation_count += add_years(pub_doi, pmid)
+            citation_count += add_years(pub_doi, pmid, session, db)
         journal = '' if not publication['metadata'] else publication['metadata']['journal']
         if journal:
             journals.add(journal)
         impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
         impact_factor += impact         
-        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source)
+        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source, impact_factor=impact_factor, journal=journal, citation_count=citation_count)
         session.add(new_publication)
     session.commit()
     return citation_count, round(impact_factor, 3), ', '.join(list(journals))
 
-def add_availability(id):
-    response = requests.get(f'https://openebench.bsc.es/monitor/rest/aggregate?id={id}').json()
-    if not response or 'entities' not in response[0]:
-        return 0
-    entities = response[0]['entities']
-    link = ''
-    for entity in entities:
-        if entity['type'] == 'web':
-            link = entity['tools'][-1]['@id']
-            break
-        elif entity['type']:
-            link = entity['tools'][-1]['@id']
-    if not link:
-        return 0
-    split_link = link.split('/')
-    response = requests.get(f'https://openebench.bsc.es/monitor/rest/homepage/{split_link[-3]}/{split_link[-2]}/{split_link[-1]}?limit=8').json()
-    codes_200 = 0
-    for item in response:
-        if item['code'] == 200:
-            codes_200 += 1
-    return round(100 * (codes_200/8))
-    
-def add_github_info(link):
-    github_url = ''
-    for item in link:
-        if 'Repository' in item['type'] and 'github' in item['url']:
-            github_url = item['url']
-    if not github_url:
-        return '', '', '', 0, 0
-    github_url = github_url[:-1] if github_url[-1] == '/' else github_url
-    owner_and_repo = github_url.split('/')[-2:]
-    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}', auth=('493043@mail.muni.cz', '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')).json()
-    if 'message' in response:
-        return github_url, '', '', 0, 0
-    created_at = '' if 'created_at' not in response else response['created_at'].split('T')[0]
-    updated_at = '' if 'updated_at' not in response else response['updated_at'].split('T')[0]
-    forks = 0 if 'forks' not in response else response['forks']
-    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}/contributors', auth=('493043@mail.muni.cz', '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')).json()
-    contributions = 0 if not response or 'contributions' not in response[0] else response[0]['contributions']
-    return github_url, created_at, updated_at, forks, contributions
-
 def add_tool(item, id):
     name = item['name']
-    version = add_latest_version(item['version'])
+    version = update_version(item['version'])
     bio_link = f'https://bio.tools/{id}'
     homepage = item['homepage']
     add_tool_types(item['toolType'], id)
@@ -226,15 +147,16 @@ def add_tool(item, id):
     add_input_output(item['function'], id, 'input', db.inputs)
     add_input_output(item['function'], id, 'output', db.outputs)
     license = item['license']
-    availability = add_availability(id)
+    availability = update_availability(id)
     documentation = item['documentation'][0]['url'] if item['documentation'] else ''
     add_collection_ids(item['collectionID'], id)
     add_elixir_platforms_nodes_communities(item['elixirPlatform'], id, db.elixir_platforms)
     add_elixir_platforms_nodes_communities(item['elixirNode'], id, db.elixir_nodes)
     add_elixir_platforms_nodes_communities(item['elixirCommunity'], id, db.elixir_communities)
     citation_count, impact_factor, journals = add_publications_and_years(item['publication'], id)
-    url, created_at, updated_at, forks, contributions = add_github_info(item['link'])
-    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, documentation=documentation, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions)
+    url, created_at, updated_at, forks, contributions = update_github_info(item['link'])
+    last_updated = date.today()
+    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, documentation=documentation, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions, last_updated=last_updated)
     return tool
         
 def get_publications_and_years_from_table(tool):
