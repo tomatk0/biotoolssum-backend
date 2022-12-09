@@ -97,6 +97,8 @@ class publications(base):
     impact_factor = Column(Float)
     citation_count = Column(Integer)
     citations_list = []
+    years = []
+    years_count = []
 
     def serialize(self):
         return {
@@ -104,7 +106,9 @@ class publications(base):
                 'pmid': self.pmid,
                 'pmcid': self.pmcid,
                 'citations_source': self.citations_source,
-                'citations_list': self.citations_list
+                'citations_list': self.citations_list,
+                'years': self.years,
+                'years_count': self.years_count
                }
 
 class years(base):

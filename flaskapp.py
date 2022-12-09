@@ -193,6 +193,18 @@ def get_lists_for_tool(tool):
     tool.elixir_nodes = get_data_from_table(tool, db.elixir_nodes)
     tool.elixir_communities = get_data_from_table(tool, db.elixir_communities)
 
+def get_years_for_publications(tool):
+    publications_query = select(db.publications).where(db.publications.bio_id == tool.bio_id)
+    for publication in session.scalars(publications_query):
+        years = []
+        years_count = []
+        years_query = select(db.years).where(db.years.doi == publication.doi)
+        for year in session.scalars(years_query):
+            years.append(year.year)
+            years_count.append(year.count)
+        publication.years = years
+        publication.years_count = years_count
+
 def get_tools_from_given_list(tools_list):
     result = []
     for t in tools_list.split(','):
@@ -207,6 +219,7 @@ def get_tools_from_given_list(tools_list):
             tool = add_tool(item, id)
             session.add(tool)
             get_lists_for_tool(tool)
+            get_years_for_publications(tool)
             result.append(tool.serialize())
     session.commit()
     return result
@@ -230,6 +243,7 @@ def get_tools_from_api(coll_id, topic, tools_list, count_db):
             tool = add_tool(item, id)
             session.add(tool)
             get_lists_for_tool(tool)
+            get_years_for_publications(tool)
             result.append(tool.serialize())
     session.commit()
     return result
@@ -245,11 +259,13 @@ def get_tools_from_db(coll_id, topic, tools_list):
             for t in session.scalars(tool_select):
                 print(f'Processing {t.bio_id} from DB (list)')
                 get_lists_for_tool(t)
+                get_years_for_publications(tool)
                 result.append(t.serialize())
         return result
     for tool in session.scalars(query):
         print(f'Processing {tool.bio_id} from DB')
         get_lists_for_tool(tool)
+        get_years_for_publications(tool)
         result.append(tool.serialize())
     return result
 
