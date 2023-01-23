@@ -2,32 +2,33 @@ from sqlalchemy import create_engine
 from sqlalchemy import Column, String, Integer, Float, Date
 from sqlalchemy.ext.declarative import declarative_base
 
-engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
-                        connect_args={'check_same_thread': False})
+# engine = create_engine('sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite', # For ubuntu
+#                         connect_args={'check_same_thread': False})
 # engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
 #                         connect_args={'check_same_thread': False})
 
+engine = create_engine('mysql+pymysql://biotoolsDB:kappa123@localhost/biotoolsDB23')
 base = declarative_base()
 
 class tools(base):
     __tablename__ = 'tools'
 
-    bio_id = Column(String, primary_key=True)
-    name = Column(String)
-    version = Column(String)
-    bio_link = Column(String)
-    homepage = Column(String)
-    description = Column(String)
-    maturity = Column(String)
-    license = Column(String)
+    bio_id = Column(String(255), primary_key=True)
+    name = Column(String(255))
+    version = Column(String(255))
+    bio_link = Column(String(255))
+    homepage = Column(String(255))
+    description = Column(String(1024))
+    maturity = Column(String(255))
+    license = Column(String(255))
     citation_count = Column(Integer)
     impact_factor = Column(Float)
-    journals = Column(String)
+    journals = Column(String(255))
     availability = Column(Integer)
-    documentation = Column(String)
-    github_url = Column(String)
-    github_created_at = Column(String)
-    github_updated_at = Column(String)
+    documentation = Column(String(255))
+    github_url = Column(String(255))
+    github_created_at = Column(String(255))
+    github_updated_at = Column(String(255))
     github_forks = Column(Integer)
     github_contributions = Column(Integer)
     last_updated = Column(Date)
@@ -88,12 +89,12 @@ class tools(base):
 class publications(base):
     __tablename__ = 'publications'
 
-    doi = Column(String, primary_key=True)
-    bio_id = Column(String, primary_key=True)
-    pmid = Column(String)
-    pmcid = Column(String)
-    citations_source = Column(String)
-    journal = Column(String)
+    doi = Column(String(255), primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    pmid = Column(String(255))
+    pmcid = Column(String(255))
+    citations_source = Column(String(255))
+    journal = Column(String(255))
     impact_factor = Column(Float)
     citation_count = Column(Integer)
     citations_list = []
@@ -114,9 +115,9 @@ class publications(base):
 class years(base):
     __tablename__ = 'years'
 
-    doi = Column(String, primary_key=True)
-    year = Column(String, primary_key=True)
-    count = Column(String)
+    doi = Column(String(255), primary_key=True)
+    year = Column(String(255), primary_key=True)
+    count = Column(String(255))
 
     def serialize(self):
         return {
@@ -127,9 +128,9 @@ class years(base):
 class functions(base):
     __tablename__ = 'functions'
 
-    bio_id = Column(String, primary_key=True)
-    term = Column(String, primary_key=True)
-    uri = Column(String)
+    bio_id = Column(String(255), primary_key=True)
+    term = Column(String(255), primary_key=True)
+    uri = Column(String(255))
 
     def serialize(self):
         return {
@@ -140,9 +141,9 @@ class functions(base):
 class topics(base):
     __tablename__ = 'topics'
 
-    bio_id = Column(String, primary_key=True)
-    term = Column(String, primary_key=True)
-    uri = Column(String)
+    bio_id = Column(String(255), primary_key=True)
+    term = Column(String(255), primary_key=True)
+    uri = Column(String(255))
 
     def serialize(self):
         return {
@@ -153,8 +154,8 @@ class topics(base):
 class institutes(base):
     __tablename__ = 'institutes'
 
-    bio_id = Column(String, primary_key=True)
-    name = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    name = Column(String(255), primary_key=True)
 
     def serialize(self):
         return {
@@ -164,8 +165,8 @@ class institutes(base):
 class platforms(base):
     __tablename__ = 'platforms'
 
-    bio_id = Column(String, primary_key=True)
-    name = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    name = Column(String(255), primary_key=True)
 
     def serialize(self):
         return {
@@ -175,8 +176,8 @@ class platforms(base):
 class tool_types(base):
     __tablename__ = 'tool_types'
 
-    bio_id = Column(String, primary_key=True)
-    name = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    name = Column(String(255), primary_key=True)
 
     def serialize(self):
         return {
@@ -186,8 +187,8 @@ class tool_types(base):
 class inputs(base):
     __tablename__ = 'inputs'
 
-    bio_id = Column(String, primary_key=True)
-    term = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    term = Column(String(255), primary_key=True)
 
     def serialize(self):
         return {
@@ -197,8 +198,8 @@ class inputs(base):
 class outputs(base):
     __tablename__ = 'outputs'
 
-    bio_id = Column(String, primary_key=True)
-    term = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    term = Column(String(255), primary_key=True)
 
     def serialize(self):
         return {
@@ -208,8 +209,8 @@ class outputs(base):
 class collection_ids(base):
     __tablename__ = 'collection_ids'
 
-    bio_id = Column(String, primary_key=True)
-    coll_id = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    coll_id = Column(String(255), primary_key=True)
 
     def serialize(self):
         return {
@@ -219,8 +220,8 @@ class collection_ids(base):
 class elixir_platforms(base):
     __tablename__ = 'elixir_platforms'
 
-    bio_id = Column(String, primary_key=True)
-    name = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    name = Column(String(255), primary_key=True)
 
     def serialize(self):
         return {
@@ -230,8 +231,8 @@ class elixir_platforms(base):
 class elixir_nodes(base):
     __tablename__ = 'elixir_nodes'
 
-    bio_id = Column(String, primary_key=True)
-    name = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    name = Column(String(255), primary_key=True)
     
     def serialize(self):
         return {
@@ -241,8 +242,8 @@ class elixir_nodes(base):
 class elixir_communities(base):
     __tablename__ = 'elixir_communities'
 
-    bio_id = Column(String, primary_key=True)
-    name = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    name = Column(String(255), primary_key=True)
 
     def serialize(self):
         return {
@@ -252,12 +253,12 @@ class elixir_communities(base):
 class queries(base):
     __tablename__ = 'queries'
 
-    id = Column(String, primary_key=True)
-    collection_id = Column(String)
-    topic = Column(String)
-    tools_list = Column(String)
-    display_type = Column(String)
-    only_names = Column(String)
+    id = Column(String(255), primary_key=True)
+    collection_id = Column(String(255))
+    topic = Column(String(255))
+    tools_list = Column(String(255))
+    display_type = Column(String(255))
+    only_names = Column(String(255))
 
     def serialize(self):
         if self.collection_id:
@@ -285,8 +286,8 @@ class queries(base):
 class matrix_queries(base):
     __tablename__ = 'matrix_queries'
 
-    bio_id = Column(String, primary_key=True)
-    matrix_query = Column(String, primary_key=True)
+    bio_id = Column(String(255), primary_key=True)
+    matrix_query = Column(String(255), primary_key=True)
 
     def serialize(self):
         return {

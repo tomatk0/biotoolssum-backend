@@ -16,7 +16,7 @@ app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 app.config['CORS_HEADERS'] = 'Content-Type'
 cors = CORS(app)
 
-celery = Celery('flaskapp', broker='amqp://myuser:mypassword@localhost:5672/myvhost', backend='db+sqlite:////home/ubuntu/flaskapp/sqlalchemy.sqlite')
+celery = Celery('flaskapp', broker='amqp://myuser:mypassword@localhost:5672/myvhost', backend='db+mysql+pymysql://biotoolsDB:kappa123@localhost/brokerDB')
 
 Session = sessionmaker(bind=db.engine)
 session = Session()
@@ -27,12 +27,9 @@ def add_tool_types(tool_types, bio_id):
         if name in already_used:
             continue
         already_used.append(name)
-        if bool(session.query(db.tool_types).filter_by(bio_id=bio_id, name=name).first()):
-            return True
         new_tool_type = db.tool_types(bio_id=bio_id, name=name)
         session.add(new_tool_type)
     session.commit()
-    return False
 
 def add_institutes(credit, bio_id):
     for item in credit:
@@ -122,7 +119,7 @@ def add_publications_and_years(publications, bio_id):
             print(f"PUB DOI MISSING {bio_id}")
             continue
         if bool(session.query(db.publications).filter_by(doi=pub_doi, bio_id=bio_id, pmid=pmid).first()):
-            print(f"THE SAME DOI BIO ID AND PMID ARE IN DB ALREADY {bio_id}")
+            print(f"PUBLICATION ALREADY IN DB FROM OTHER TOOL {pub_doi}")
             continue
         citations_source = ''
         if pmid:
@@ -143,9 +140,7 @@ def add_tool(item, id):
     version = update_version(item['version'])
     bio_link = f'https://bio.tools/{id}'
     homepage = item['homepage']
-    already_exists = add_tool_types(item['toolType'], id)
-    if already_exists:
-        return None
+    add_tool_types(item['toolType'], id)
     add_institutes(item['credit'], id)
     description = item['description']
     add_topics(item['topic'], id)
@@ -303,8 +298,8 @@ def get_parameters():
         display_type = request.form.get('option')
         if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, display_type=display_type, only_names=only_names_form).first()):
             return render_template("get_parameters.html", content=existing_queries)  
-        get_tools.delay(coll_id_form, topic_form, tools_list_form, only_names_form, display_type)
-        # _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form, display_type)
+        # get_tools.delay(coll_id_form, topic_form, tools_list_form, only_names_form, display_type)
+        _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form, display_type)
         new_query = db.queries(id=create_hash(), collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, display_type=display_type, only_names=only_names_form)
         session.add(new_query)
         session.commit()
@@ -341,6 +336,7 @@ def add_matrix_queries(coll_id, topic):
             page = response['next']
     session.commit()
 
+# celery -A flaskapp.celery  worker -l INFO
 @celery.task()            
 def get_tools(coll_id, topic, tools_list, only_names, display_type):
     result_db = get_tools_from_db(coll_id, topic, tools_list)
