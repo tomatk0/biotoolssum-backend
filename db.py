@@ -7,7 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 # engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
 #                         connect_args={'check_same_thread': False})
 
-engine = create_engine('mysql+pymysql://biotoolsDB:kappa123@localhost/biotoolsDB23')
+engine = create_engine('mysql+pymysql://biotoolsDB:kappa123@localhost/biotoolsDB29')
 base = declarative_base()
 
 class tools(base):
@@ -32,6 +32,8 @@ class tools(base):
     github_forks = Column(Integer)
     github_contributions = Column(Integer)
     last_updated = Column(Date)
+    min_year = Column(String(255))
+    max_year = Column(String(255))
     matrix_queries = []
     publications = []
     functions = []
@@ -78,7 +80,9 @@ class tools(base):
                 'collection_ids': self.collection_ids,
                 'elixir_platforms': self.elixir_platforms,
                 'elixir_nodes': self.elixir_nodes,
-                'elixir_communities': self.elixir_communities
+                'elixir_communities': self.elixir_communities,
+                'min_year': self.min_year,
+                'max_year': self.max_year
                }
 
     def serialize_name_only(self):
@@ -98,8 +102,6 @@ class publications(base):
     impact_factor = Column(Float)
     citation_count = Column(Integer)
     citations_list = []
-    years = []
-    years_count = []
 
     def serialize(self):
         return {
@@ -108,8 +110,6 @@ class publications(base):
                 'pmcid': self.pmcid,
                 'citations_source': self.citations_source,
                 'citations_list': self.citations_list,
-                'years': self.years,
-                'years_count': self.years_count
                }
 
 class years(base):

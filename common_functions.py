@@ -69,7 +69,7 @@ def add_years(doi, pmid, session, db):
     response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()
     citation_count = response['hitCount']
     if citation_count < 1:
-        return 0
+        return 0, '2022', '2022'
     number_of_pages = (response['hitCount'] // 1000) + 1
     years_dict = {}
     for i in range(1, number_of_pages + 1):
@@ -77,10 +77,13 @@ def add_years(doi, pmid, session, db):
         for item in response['citationList']['citation']:
             year = str(item['pubYear'])
             years_dict[year] = years_dict.get(year, 0) + 1
+    keys_list = list(years_dict.keys())
+    min_year = '2022' if not keys_list else min(keys_list)
+    max_year = '2022' if not keys_list else max(keys_list)
     for key, val in years_dict.items():
         if bool(session.query(db.years).filter_by(doi=doi, year=key, count=val).first()):
-            return citation_count
+            return citation_count, min_year, max_year
         new_year = db.years(doi=doi, year=key, count=val)
         session.add(new_year)
     session.commit()
-    return citation_count
+    return citation_count, min_year, max_year

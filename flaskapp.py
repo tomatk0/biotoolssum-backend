@@ -10,6 +10,7 @@ from wos import impacts
 from datetime import date
 from common_functions import update_availability, update_github_info, update_version, get_doi_pmid_source, add_years
 from celery import Celery
+from time import time
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -107,6 +108,7 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
     session.commit()
 
 def add_publications_and_years(publications, bio_id):
+    min_year, max_year = '2022', '2022'
     citation_count = 0
     impact_factor = 0
     journals = set()
@@ -124,7 +126,12 @@ def add_publications_and_years(publications, bio_id):
         citations_source = ''
         if pmid:
             citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}'
-            citation_count += add_years(pub_doi, pmid, session, db)
+            cit_count, min_y, max_y = add_years(pub_doi, pmid, session, db)
+            citation_count += cit_count
+            if min_y < min_year:
+                min_year = min_y
+            if max_y > max_year:
+                max_year = max_y
         journal = '' if not publication['metadata'] else publication['metadata']['journal']
         if journal:
             journals.add(journal)
@@ -133,7 +140,7 @@ def add_publications_and_years(publications, bio_id):
         new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source, impact_factor=impact_factor, journal=journal, citation_count=citation_count)
         session.add(new_publication)
     session.commit()
-    return citation_count, round(impact_factor, 3), ', '.join(list(journals))
+    return citation_count, round(impact_factor, 3), ', '.join(list(journals)), min_year, max_year
 
 def add_tool(item, id):
     name = item['name']
@@ -156,10 +163,10 @@ def add_tool(item, id):
     add_elixir_platforms_nodes_communities(item['elixirPlatform'], id, db.elixir_platforms)
     add_elixir_platforms_nodes_communities(item['elixirNode'], id, db.elixir_nodes)
     add_elixir_platforms_nodes_communities(item['elixirCommunity'], id, db.elixir_communities)
-    citation_count, impact_factor, journals = add_publications_and_years(item['publication'], id)
+    citation_count, impact_factor, journals, min_year, max_year = add_publications_and_years(item['publication'], id)
     url, created_at, updated_at, forks, contributions = update_github_info(item['link'])
     last_updated = date.today()
-    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, documentation=documentation, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions, last_updated=last_updated)
+    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, documentation=documentation, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions, last_updated=last_updated, min_year=min_year, max_year=max_year)
     return tool
         
 def get_publications_and_years_from_table(tool):
@@ -346,8 +353,7 @@ def get_tools(coll_id, topic, tools_list, only_names, display_type):
     topic = f'&topic=\"{topic}\"' if topic else ''
     result_api = get_tools_from_api(coll_id, topic, tools_list, count_db)
     print(f'TOOLS FROM API:{len(result_api)}')
-    if display_type == 'matrix':
-        add_matrix_queries(coll_id, topic)
+    add_matrix_queries(coll_id, topic)
     result_db.extend(result_api)
     result = show_only_names(result_db, only_names)
     return jsonify(result)
