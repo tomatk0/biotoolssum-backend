@@ -1,4 +1,4 @@
-from flask import Flask, session, render_template, request, jsonify
+from flask import Flask, session, render_template, jsonify, request
 import requests
 import db
 from sqlalchemy.orm import sessionmaker
@@ -9,15 +9,12 @@ import random
 from wos import impacts
 from datetime import date
 from common_functions import update_availability, update_github_info, update_version, get_doi_pmid_source, add_years
-from celery import Celery
 from time import time
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 app.config['CORS_HEADERS'] = 'Content-Type'
 cors = CORS(app)
-
-celery = Celery('flaskapp', broker='amqp://myuser:mypassword@localhost:5672/myvhost', backend='db+mysql+pymysql://biotoolsDB:kappa123@localhost/brokerDB')
 
 Session = sessionmaker(bind=db.engine)
 session = Session()
@@ -30,15 +27,21 @@ def add_tool_types(tool_types, bio_id):
         already_used.append(name)
         new_tool_type = db.tool_types(bio_id=bio_id, name=name)
         session.add(new_tool_type)
-    session.commit()
-
+    try:
+        session.commit()
+    except:
+        session.rollback()
+    
 def add_institutes(credit, bio_id):
     for item in credit:
         if item['typeEntity'] == 'Institute':
             name = item['name']
             new_institute = db.institutes(bio_id=bio_id, name=name)
             session.add(new_institute)
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
 
 def add_topics(topics, bio_id):
     already_used = []
@@ -50,7 +53,10 @@ def add_topics(topics, bio_id):
         already_used.append(term)
         new_topic = db.topics(bio_id=bio_id, term=term, uri=uri)
         session.add(new_topic)
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
 
 def add_functions(functions, bio_id):
     if not functions:
@@ -64,13 +70,19 @@ def add_functions(functions, bio_id):
         already_used.append(term)
         new_function = db.functions(bio_id=bio_id, term=term, uri=uri)
         session.add(new_function)
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
 
 def add_platforms(platforms, bio_id):
     for name in platforms:
         new_platform = db.platforms(bio_id=bio_id, name=name)
         session.add(new_platform)
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
 
 def add_input_output(functions, bio_id, input_or_output, table):
     if not functions:
@@ -83,7 +95,10 @@ def add_input_output(functions, bio_id, input_or_output, table):
         already_used.append(term)
         new_item = table(bio_id=bio_id, term=term)
         session.add(new_item)
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
 
 def add_collection_ids(collection_ids, bio_id):
     already_used = []
@@ -93,7 +108,10 @@ def add_collection_ids(collection_ids, bio_id):
         already_used.append(coll_id)
         new_coll_id = db.collection_ids(bio_id=bio_id, coll_id=coll_id)
         session.add(new_coll_id)
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
 
 def add_elixir_platforms_nodes_communities(items, bio_id, table):
     if not items:
@@ -105,7 +123,10 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
         already_used.append(item)
         new_item = table(bio_id=bio_id, name=item)
         session.add(new_item)
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
 
 def add_publications_and_years(publications, bio_id):
     min_year, max_year = '2022', '2022'
@@ -139,7 +160,10 @@ def add_publications_and_years(publications, bio_id):
         impact_factor += impact         
         new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source, impact_factor=impact_factor, journal=journal, citation_count=citation_count)
         session.add(new_publication)
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
     return citation_count, round(impact_factor, 3), ', '.join(list(journals)), min_year, max_year
 
 def add_tool(item, id):
@@ -219,7 +243,10 @@ def get_tools_from_given_list(tools_list):
                 session.add(tool)
                 get_lists_for_tool(tool)
                 result.append(tool.serialize())
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
     return result
 
 def get_tools_from_api(coll_id, topic, tools_list, count_db):
@@ -243,7 +270,10 @@ def get_tools_from_api(coll_id, topic, tools_list, count_db):
                 session.add(tool)
                 get_lists_for_tool(tool)
                 result.append(tool.serialize())
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
     return result
 
 def get_tools_from_db(coll_id, topic, tools_list):
@@ -305,11 +335,13 @@ def get_parameters():
         display_type = request.form.get('option')
         if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, display_type=display_type, only_names=only_names_form).first()):
             return render_template("get_parameters.html", content=existing_queries)  
-        # get_tools.delay(coll_id_form, topic_form, tools_list_form, only_names_form, display_type)
         _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form, display_type)
         new_query = db.queries(id=create_hash(), collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, display_type=display_type, only_names=only_names_form)
         session.add(new_query)
-        session.commit()
+        try:
+            session.commit()
+        except:
+            session.rollback()
         existing_queries = get_existing_queries()
         return render_template("get_parameters.html", content=existing_queries)   
     return render_template("get_parameters.html", content=existing_queries)
@@ -341,10 +373,11 @@ def add_matrix_queries(coll_id, topic):
                 new_query = db.matrix_queries(bio_id=id, matrix_query=query)
                 session.add(new_query)
             page = response['next']
-    session.commit()
-
-# celery -A flaskapp.celery  worker -l INFO
-@celery.task()            
+    try:
+        session.commit()
+    except:
+        session.rollback()
+          
 def get_tools(coll_id, topic, tools_list, only_names, display_type):
     result_db = get_tools_from_db(coll_id, topic, tools_list)
     count_db = len(result_db)

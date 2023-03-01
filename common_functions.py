@@ -85,5 +85,8 @@ def add_years(doi, pmid, session, db):
             return citation_count, min_year, max_year
         new_year = db.years(doi=doi, year=key, count=val)
         session.add(new_year)
-    session.commit()
+    try:
+        session.commit()
+    except:
+        session.rollback()
     return citation_count, min_year, max_year

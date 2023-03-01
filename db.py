@@ -7,7 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 # engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
 #                         connect_args={'check_same_thread': False})
 
-engine = create_engine('mysql+pymysql://biotoolsDB:kappa123@localhost/biotoolsDB29')
+engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biotoolsDB4')
 base = declarative_base()
 
 class tools(base):
