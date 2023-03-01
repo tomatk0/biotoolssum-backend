@@ -257,7 +257,6 @@ class queries(base):
     collection_id = Column(String(255))
     topic = Column(String(255))
     tools_list = Column(String(255))
-    display_type = Column(String(255))
     only_names = Column(String(255))
 
     def serialize(self):
@@ -266,21 +265,18 @@ class queries(base):
                 'id': self.id,
                 'collection_id': self.collection_id,
                 'only_names': self.only_names,
-                'display_type': self.display_type
             }
         elif self.topic:
             return {
                 'id': self.id,
                 'topic': self.topic,
                 'only_names': self.only_names,
-                'display_type': self.display_type
             }
         elif self.tools_list:
             return {
                 'id': self.id,
                 'tools_list': self.tools_list,
                 'only_names': self.only_names,
-                'display_type': self.display_type
             }
 
 class matrix_queries(base):

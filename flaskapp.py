@@ -332,11 +332,10 @@ def get_parameters():
         if non_empty != 1:
             return render_template("get_parameters.html")
         only_names_form = 'off' if not request.form.get('only_names') else 'on'
-        display_type = request.form.get('option')
-        if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, display_type=display_type, only_names=only_names_form).first()):
+        if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form).first()):
             return render_template("get_parameters.html", content=existing_queries)  
-        _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form, display_type)
-        new_query = db.queries(id=create_hash(), collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, display_type=display_type, only_names=only_names_form)
+        _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form)
+        new_query = db.queries(id=create_hash(), collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form)
         session.add(new_query)
         try:
             session.commit()
@@ -356,7 +355,7 @@ def get_data_from_frontend():
         query = None
         for q in session.scalars(query_select):
             query = q
-        return get_tools(query.collection_id, query.topic, query.tools_list, query.only_names, query.display_type)
+        return get_tools(query.collection_id, query.topic, query.tools_list, query.only_names)
 
 def add_matrix_queries(coll_id, topic):
     matrix_queries = ['dna sequence', 'dna secondary structure', 'dna structure', 'genomics', 'rna sequence', 'rna secondary structure', 'rna structure', 'rna omics', 'protein sequence', 'protein secondary structure', 'protein structure', 'protein omics', 'small molecule primary sequence', 'small molecule secondary structure', 'small molecule structure', 'small molecule omics']
@@ -378,7 +377,14 @@ def add_matrix_queries(coll_id, topic):
     except:
         session.rollback()
           
-def get_tools(coll_id, topic, tools_list, only_names, display_type):
+def get_tools(coll_id, topic, tools_list, only_names):
+    resulting_string = ''
+    if coll_id:
+        resulting_string = f'All tools from the{coll_id} collection.'
+    elif topic:
+        resulting_string = f'All tools about the {topic} topic.'
+    else:
+        resulting_string = 'All tools from a custom query'
     result_db = get_tools_from_db(coll_id, topic, tools_list)
     count_db = len(result_db)
     print(f'TOOLS FROM DB:{count_db}')
@@ -389,7 +395,7 @@ def get_tools(coll_id, topic, tools_list, only_names, display_type):
     add_matrix_queries(coll_id, topic)
     result_db.extend(result_api)
     result = show_only_names(result_db, only_names)
-    return jsonify(result)
+    return jsonify(resulting_string=resulting_string, only_names=only_names, data=result)
 
 if __name__ == "__main__":
     app.run(debug=True)

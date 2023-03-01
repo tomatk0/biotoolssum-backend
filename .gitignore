@@ -1,1 +1,3 @@
 __pycache__
+gunicorn_access.log
+gunicorn_error.log
