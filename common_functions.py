@@ -48,22 +48,35 @@ def update_github_info(link):
     contributions = 0 if not response or 'contributions' not in response[0] else response[0]['contributions']
     return github_url, created_at, updated_at, forks, contributions
 
-def get_doi_pmid_source(pub_doi, pmid, pmcid):
+def get_doi_pmid_source_details(pub_doi, pmid, pmcid):
     if pub_doi:
         response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pub_doi}&pageSize=1000&format=json').json()
     elif pmid:
         response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmid}&pageSize=1000&format=json').json()
     result = response['resultList']['result'] if response['resultList'] else []
     source = ''
+    details = ''
     for item in result:
         source = item['source']
         if 'doi' in item and item['doi'] == pub_doi:
             pmid = item['id'] if 'id' in item else pmid
+            author_string = '' if 'authorString' not in item else item['authorString']+', '
+            title = '' if 'title' not in item else item['title']+', '
+            journal_title = '' if 'journalTitle' not in item else item['journalTitle']+', '
+            pub_year = '' if 'pubYear' not in item else item['pubYear']+', '
+            page_info = '' if 'pageInfo' not in item else item['pageInfo']
+            details = author_string + title + journal_title + pub_year + page_info
             break
         if 'id' in item and (item['id'] == pmid or item['id'] == pmcid):
             pub_doi = item['doi'] if 'doi' in item else pub_doi
+            author_string = '' if 'authorString' not in item else item['authorString']+', '
+            title = '' if 'title' not in item else item['title']+', '
+            journal_title = '' if 'journalTitle' not in item else item['journalTitle']+', '
+            pub_year = '' if 'pubYear' not in item else item['pubYear']+', '
+            page_info = '' if 'pageInfo' not in item else item['pageInfo']
+            details = author_string + title + journal_title + pub_year + page_info
             break
-    return pub_doi, pmid, source
+    return pub_doi, pmid, source, details
 
 def add_years(doi, pmid, session, db):
     response = requests.get(f'https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json').json()

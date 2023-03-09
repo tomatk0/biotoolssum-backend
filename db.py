@@ -7,7 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 # engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
 #                         connect_args={'check_same_thread': False})
 
-engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biotoolsDB4')
+engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biotoolsDB25')
 base = declarative_base()
 
 class tools(base):
@@ -18,7 +18,7 @@ class tools(base):
     version = Column(String(255))
     bio_link = Column(String(255))
     homepage = Column(String(255))
-    description = Column(String(1024))
+    description = Column(String(1020))
     maturity = Column(String(255))
     license = Column(String(255))
     citation_count = Column(Integer)
@@ -85,11 +85,6 @@ class tools(base):
                 'max_year': self.max_year
                }
 
-    def serialize_name_only(self):
-        return {
-            'bio_id': self.bio_id
-        }
-
 class publications(base):
     __tablename__ = 'publications'
 
@@ -97,6 +92,7 @@ class publications(base):
     bio_id = Column(String(255), primary_key=True)
     pmid = Column(String(255))
     pmcid = Column(String(255))
+    details = Column(String(1020))
     citations_source = Column(String(255))
     journal = Column(String(255))
     impact_factor = Column(Float)
@@ -108,6 +104,7 @@ class publications(base):
                 'doi': self.doi,
                 'pmid': self.pmid,
                 'pmcid': self.pmcid,
+                'details': self.details,
                 'citations_source': self.citations_source,
                 'citations_list': self.citations_list,
                }
@@ -257,26 +254,22 @@ class queries(base):
     collection_id = Column(String(255))
     topic = Column(String(255))
     tools_list = Column(String(255))
-    only_names = Column(String(255))
 
     def serialize(self):
         if self.collection_id:
             return {
                 'id': self.id,
                 'collection_id': self.collection_id,
-                'only_names': self.only_names,
             }
         elif self.topic:
             return {
                 'id': self.id,
                 'topic': self.topic,
-                'only_names': self.only_names,
             }
         elif self.tools_list:
             return {
                 'id': self.id,
                 'tools_list': self.tools_list,
-                'only_names': self.only_names,
             }
 
 class matrix_queries(base):

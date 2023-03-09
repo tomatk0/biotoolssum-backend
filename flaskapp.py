@@ -8,16 +8,20 @@ from flask_cors import CORS, cross_origin
 import random
 from wos import impacts
 from datetime import date
-from common_functions import update_availability, update_github_info, update_version, get_doi_pmid_source, add_years
-from time import time
+from common_functions import update_availability, update_github_info, update_version, get_doi_pmid_source_details, add_years
+import time
+from celery import Celery
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 app.config['CORS_HEADERS'] = 'Content-Type'
+app.app_context().push()
 cors = CORS(app)
 
 Session = sessionmaker(bind=db.engine)
 session = Session()
+
+celery = Celery(app.name, broker='amqp://myuser:mypassword@localhost:5672/myvhost', backend='db+mysql+pymysql://biotoolsDB:password@localhost/brokerDB')
 
 def add_tool_types(tool_types, bio_id):
     already_used = []
@@ -137,7 +141,7 @@ def add_publications_and_years(publications, bio_id):
         pub_doi = '' if not publication['doi'] else publication['doi'].lower()
         pmid = publication['pmid']
         pmcid = publication['pmcid']
-        pub_doi, pmid, source = get_doi_pmid_source(pub_doi, pmid, pmcid)
+        pub_doi, pmid, source, details = get_doi_pmid_source_details(pub_doi, pmid, pmcid)
         if not pub_doi:
             print(f"PUB DOI MISSING {bio_id}")
             continue
@@ -158,7 +162,7 @@ def add_publications_and_years(publications, bio_id):
             journals.add(journal)
         impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
         impact_factor += impact         
-        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, citations_source=citations_source, impact_factor=impact_factor, journal=journal, citation_count=citation_count)
+        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, details=details, citations_source=citations_source, impact_factor=impact_factor, journal=journal, citation_count=citation_count)
         session.add(new_publication)
     try:
         session.commit()
@@ -295,16 +299,6 @@ def get_tools_from_db(coll_id, topic, tools_list):
         result.append(tool.serialize())
     return result
 
-def show_only_names(tools, only_names):
-    if only_names == 'off':
-        return tools
-    result = []
-    for tool in tools:
-        tool_select = select(db.tools).where(db.tools.bio_id == tool['bio_id'])
-        for t in session.scalars(tool_select):
-            result.append(t.serialize_name_only())
-    return result
-
 def get_existing_queries():
     result = []
     queries_select = select(db.queries)
@@ -320,7 +314,7 @@ def create_hash():
 
 @app.route("/", methods=["POST", "GET"])
 def get_parameters():
-    existing_queries = get_existing_queries() 
+    existing_queries = get_existing_queries()
     if request.method == "POST":
         non_empty = 0
         coll_id_form = request.form.get("coll_id")
@@ -331,11 +325,11 @@ def get_parameters():
                 non_empty += 1
         if non_empty != 1:
             return render_template("get_parameters.html")
-        only_names_form = 'off' if not request.form.get('only_names') else 'on'
-        if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form).first()):
-            return render_template("get_parameters.html", content=existing_queries)  
-        _ = get_tools(coll_id_form, topic_form, tools_list_form, only_names_form)
-        new_query = db.queries(id=create_hash(), collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form, only_names=only_names_form)
+        if bool(session.query(db.queries).filter_by(collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form).first()):
+            return render_template("get_parameters.html", content=existing_queries)
+        # _ = get_tools(coll_id_form, topic_form, tools_list_form)
+        get_tools.delay(coll_id_form, topic_form, tools_list_form)
+        new_query = db.queries(id=create_hash(), collection_id=coll_id_form, topic=topic_form, tools_list=tools_list_form)
         session.add(new_query)
         try:
             session.commit()
@@ -349,13 +343,14 @@ def get_parameters():
 @cross_origin()
 def get_data_from_frontend():
     if request.method == "POST":
-        request_data = request.get_json()
-        id = request_data['id']
-        query_select = select(db.queries).where(db.queries.id == id)
-        query = None
-        for q in session.scalars(query_select):
-            query = q
-        return get_tools(query.collection_id, query.topic, query.tools_list, query.only_names)
+        with Session() as session: 
+            request_data = request.get_json()
+            id = request_data['id']
+            query_select = select(db.queries).where(db.queries.id == id)
+            query = None
+            for q in session.scalars(query_select):
+                query = q
+            return get_tools(query.collection_id, query.topic, query.tools_list)
 
 def add_matrix_queries(coll_id, topic):
     matrix_queries = ['dna sequence', 'dna secondary structure', 'dna structure', 'genomics', 'rna sequence', 'rna secondary structure', 'rna structure', 'rna omics', 'protein sequence', 'protein secondary structure', 'protein structure', 'protein omics', 'small molecule primary sequence', 'small molecule secondary structure', 'small molecule structure', 'small molecule omics']
@@ -376,11 +371,12 @@ def add_matrix_queries(coll_id, topic):
         session.commit()
     except:
         session.rollback()
-          
-def get_tools(coll_id, topic, tools_list, only_names):
+
+@celery.task()
+def get_tools(coll_id, topic, tools_list):
     resulting_string = ''
     if coll_id:
-        resulting_string = f'All tools from the{coll_id} collection.'
+        resulting_string = f'All tools from the {coll_id} collection.'
     elif topic:
         resulting_string = f'All tools about the {topic} topic.'
     else:
@@ -394,8 +390,7 @@ def get_tools(coll_id, topic, tools_list, only_names):
     print(f'TOOLS FROM API:{len(result_api)}')
     add_matrix_queries(coll_id, topic)
     result_db.extend(result_api)
-    result = show_only_names(result_db, only_names)
-    return jsonify(resulting_string=resulting_string, only_names=only_names, data=result)
+    return jsonify(resulting_string=resulting_string, data=result_db)
 
 if __name__ == "__main__":
     app.run(debug=True)
