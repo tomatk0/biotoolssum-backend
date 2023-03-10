@@ -8,9 +8,12 @@ def update_version(versions):
     return 'v' + versions[0]
 
 def update_availability(id):
-    response = requests.get(f'https://openebench.bsc.es/monitor/rest/aggregate?id={id}').json()
+    response = requests.get(f'https://openebench.bsc.es/monitor/rest/aggregate?id={id}')
+    if not response.ok:
+        return 'Not available'
+    response = response.json()
     if not response or 'entities' not in response[0]:
-        return 0
+        return '0'
     entities = response[0]['entities']
     link = ''
     for entity in entities:
@@ -20,14 +23,14 @@ def update_availability(id):
         elif entity['type']:
             link = entity['tools'][-1]['@id']
     if not link:
-        return 0
+        return '0'
     split_link = link.split('/')
     response = requests.get(f'https://openebench.bsc.es/monitor/rest/homepage/{split_link[-3]}/{split_link[-2]}/{split_link[-1]}?limit=8').json()
     codes_200 = 0
     for item in response:
         if item['code'] == 200:
             codes_200 += 1
-    return round(100 * (codes_200/8))
+    return str(round(100 * (codes_200/8)))
 
 def update_github_info(link):
     github_url = ''
@@ -35,17 +38,23 @@ def update_github_info(link):
         if 'Repository' in item['type'] and 'github' in item['url']:
             github_url = item['url']
     if not github_url:
-        return '', '', '', 0, 0
+        return '', '', '', '0', '0'
     github_url = github_url[:-1] if github_url[-1] == '/' else github_url
     owner_and_repo = github_url.split('/')[-2:]
-    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}', auth=('493043@mail.muni.cz', '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')).json()
+    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}', auth=('493043@mail.muni.cz', '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'))
+    if not response.ok:
+        return 'Not available', 'Not available', 'Not available', 'Not available', 'Not available'
+    response = response.json()
     if 'message' in response:
-        return github_url, '', '', 0, 0
+        return github_url, '', '', '0', '0'
     created_at = '' if 'created_at' not in response else response['created_at'].split('T')[0]
     updated_at = '' if 'updated_at' not in response else response['updated_at'].split('T')[0]
-    forks = 0 if 'forks' not in response else response['forks']
-    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}/contributors', auth=('493043@mail.muni.cz', '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')).json()
-    contributions = 0 if not response or 'contributions' not in response[0] else response[0]['contributions']
+    forks = '0' if 'forks' not in response else str(response['forks'])
+    response = requests.get(f'https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}/contributors', auth=('493043@mail.muni.cz', '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'))
+    if not response.ok:
+        return 'Not available', 'Not available', 'Not available', 'Not available', 'Not available'
+    response = response.json()
+    contributions = '0' if not response or 'contributions' not in response[0] else str(response[0]['contributions'])
     return github_url, created_at, updated_at, forks, contributions
 
 def get_doi_pmid_source_details(pub_doi, pmid, pmcid):

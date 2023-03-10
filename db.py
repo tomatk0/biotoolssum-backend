@@ -7,7 +7,7 @@ from sqlalchemy.ext.declarative import declarative_base
 # engine = create_engine('sqlite:///sqlalchemy.sqlite', # For windows
 #                         connect_args={'check_same_thread': False})
 
-engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biotoolsDB25')
+engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biotoolsDB28')
 base = declarative_base()
 
 class tools(base):
@@ -24,13 +24,13 @@ class tools(base):
     citation_count = Column(Integer)
     impact_factor = Column(Float)
     journals = Column(String(255))
-    availability = Column(Integer)
+    availability = Column(String(255))
     documentation = Column(String(255))
     github_url = Column(String(255))
     github_created_at = Column(String(255))
     github_updated_at = Column(String(255))
-    github_forks = Column(Integer)
-    github_contributions = Column(Integer)
+    github_forks = Column(String(255))
+    github_contributions = Column(String(255))
     last_updated = Column(Date)
     min_year = Column(String(255))
     max_year = Column(String(255))
