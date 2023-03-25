@@ -3,13 +3,11 @@ import db
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 from datetime import date
-from common_functions import (
+from common_functions import
     update_availability,
     update_github_info,
     update_version,
-    get_doi_pmid_source,
-    add_years,
-)
+    get_doi_pmid_source_details_citation_count
 from wos import impacts
 
 Session = sessionmaker(bind=db.engine)

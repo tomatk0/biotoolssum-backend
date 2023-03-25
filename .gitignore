@@ -1,4 +1,5 @@
-__pycache__
-gunicorn_access.log
+__pycache__/
+celery.log
 gunicorn_error.log
-myprojectenv
+myprojectenv/
+myproject.sock

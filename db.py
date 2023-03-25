@@ -1,11 +1,8 @@
 from sqlalchemy import Column, String, Integer, Float, Date, create_engine
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.pool import NullPool
 
-engine = create_engine(
-    "sqlite:///sqlalchemy.sqlite",  # For windows
-)
-
-# engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biotoolsDB28')
+engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/bio24', poolclass=NullPool)
 base = declarative_base()
 
 
@@ -17,7 +14,7 @@ class tools(base):
     version = Column(String(255))
     bio_link = Column(String(255))
     homepage = Column(String(255))
-    description = Column(String(1020))
+    description = Column(String(5000))
     maturity = Column(String(255))
     license = Column(String(255))
     citation_count = Column(Integer)
@@ -92,7 +89,7 @@ class publications(base):
     bio_id = Column(String(255), primary_key=True)
     pmid = Column(String(255))
     pmcid = Column(String(255))
-    details = Column(String(1020))
+    details = Column(String(5000))
     citations_source = Column(String(255))
     journal = Column(String(255))
     impact_factor = Column(Float)
@@ -240,23 +237,6 @@ class queries(base):
     collection_id = Column(String(255))
     topic = Column(String(255))
     tools_list = Column(String(255))
-
-    def serialize(self):
-        if self.collection_id:
-            return {
-                "id": self.id,
-                "collection_id": self.collection_id,
-            }
-        elif self.topic:
-            return {
-                "id": self.id,
-                "topic": self.topic,
-            }
-        elif self.tools_list:
-            return {
-                "id": self.id,
-                "tools_list": self.tools_list,
-            }
 
 
 class matrix_queries(base):

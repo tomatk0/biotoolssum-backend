@@ -1,6 +1,5 @@
 import requests
 
-
 def update_version(versions):
     if not versions:
         return ""
@@ -8,14 +7,13 @@ def update_version(versions):
         return versions[0]
     return "v" + versions[0]
 
-
 def update_availability(id):
-    response = requests.get(f"https://openebench.bsc.es/monitor/rest/aggregate?id={id}")
+    response = requests.get(f"https://openebench.bsc.es/monitor/rest/aggregate?id={id.lower()}")
     if not response.ok:
         return "Not available"
     response = response.json()
     if not response or "entities" not in response[0]:
-        return "0"
+        return "Not available"
     entities = response[0]["entities"]
     link = ""
     for entity in entities:
@@ -29,23 +27,28 @@ def update_availability(id):
     split_link = link.split("/")
     response = requests.get(
         f"https://openebench.bsc.es/monitor/rest/homepage/{split_link[-3]}/{split_link[-2]}/{split_link[-1]}?limit=8"
-    ).json()
+    )
+    if not response.ok:
+        return "Not available"
+    response = response.json()
     codes_200 = 0
     for item in response:
         if item["code"] == 200:
             codes_200 += 1
     return str(round(100 * (codes_200 / 8)))
 
-
 def update_github_info(link):
     github_url = ""
     for item in link:
         if "Repository" in item["type"] and "github" in item["url"]:
             github_url = item["url"]
+            break
     if not github_url:
         return "", "", "", "0", "0"
     github_url = github_url[:-1] if github_url[-1] == "/" else github_url
     owner_and_repo = github_url.split("/")[-2:]
+    if owner_and_repo[0] == 'github.com':
+        return "", "", "", "0", "0"
     response = requests.get(
         f"https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}",
         auth=(
@@ -87,85 +90,49 @@ def update_github_info(link):
             "Not available",
         )
     response = response.json()
-    contributions = (
-        "0"
-        if not response or "contributions" not in response[0]
-        else str(response[0]["contributions"])
+    contributions = 0
+    if isinstance(response, list):
+        for user in response:
+            contributions += user['contributions']
+    return github_url, created_at, updated_at, forks, str(contributions)
+
+def get_citation_count_and_details(item):
+    author_string = (
+        "" if "authorString" not in item else item["authorString"] + ", "
     )
-    return github_url, created_at, updated_at, forks, contributions
+    title = "" if "title" not in item else item["title"] + ", "
+    journal_title = (
+        "" if "journalTitle" not in item else item["journalTitle"] + ", "
+    )
+    pub_year = "" if "pubYear" not in item else item["pubYear"] + ", "
+    page_info = "" if "pageInfo" not in item else item["pageInfo"]
+    details = author_string + title + journal_title + pub_year + page_info
+    citation_count = 0 if "citedByCount" not in item else item["citedByCount"]
+    return citation_count, details
 
 
-def get_doi_pmid_source_details(pub_doi, pmid, pmcid):
+def get_doi_pmid_source_details_citation_count(pub_doi, pmid, pmcid):
     if pub_doi:
-        response = requests.get(
-            f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pub_doi}&pageSize=1000&format=json"
-        ).json()
+        response = requests.get(f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pub_doi}&pageSize=1000&format=json")
     elif pmid:
-        response = requests.get(
-            f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmid}&pageSize=1000&format=json"
-        ).json()
+        response = requests.get(f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmid}&pageSize=1000&format=json")
+    elif pmcid:
+        response = requests.get(f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmcid}&pageSize=1000&format=json")
+    if not response.ok:
+        return "Not available", "Not available", "Not available", "Not available", 0
+    response = response.json()
     result = response["resultList"]["result"] if response["resultList"] else []
     source = ""
     details = ""
+    citation_count = 0
     for item in result:
         source = item["source"]
         if "doi" in item and item["doi"] == pub_doi:
             pmid = item["id"] if "id" in item else pmid
-            author_string = (
-                "" if "authorString" not in item else item["authorString"] + ", "
-            )
-            title = "" if "title" not in item else item["title"] + ", "
-            journal_title = (
-                "" if "journalTitle" not in item else item["journalTitle"] + ", "
-            )
-            pub_year = "" if "pubYear" not in item else item["pubYear"] + ", "
-            page_info = "" if "pageInfo" not in item else item["pageInfo"]
-            details = author_string + title + journal_title + pub_year + page_info
+            citation_count, details = get_citation_count_and_details(item)
             break
         if "id" in item and (item["id"] == pmid or item["id"] == pmcid):
             pub_doi = item["doi"] if "doi" in item else pub_doi
-            author_string = (
-                "" if "authorString" not in item else item["authorString"] + ", "
-            )
-            title = "" if "title" not in item else item["title"] + ", "
-            journal_title = (
-                "" if "journalTitle" not in item else item["journalTitle"] + ", "
-            )
-            pub_year = "" if "pubYear" not in item else item["pubYear"] + ", "
-            page_info = "" if "pageInfo" not in item else item["pageInfo"]
-            details = author_string + title + journal_title + pub_year + page_info
+            citation_count, details = get_citation_count_and_details(item)
             break
-    return pub_doi, pmid, source, details
-
-
-def add_years(doi, pmid, session, db):
-    response = requests.get(
-        f"https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json"
-    ).json()
-    citation_count = response["hitCount"]
-    if citation_count < 1:
-        return 0, "2022", "2022"
-    number_of_pages = (response["hitCount"] // 1000) + 1
-    years_dict = {}
-    for i in range(1, number_of_pages + 1):
-        response = requests.get(
-            f"https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/{i}/1000/json"
-        ).json()
-        for item in response["citationList"]["citation"]:
-            year = str(item["pubYear"])
-            years_dict[year] = years_dict.get(year, 0) + 1
-    keys_list = list(years_dict.keys())
-    min_year = "2022" if not keys_list else min(keys_list)
-    max_year = "2022" if not keys_list else max(keys_list)
-    for key, val in years_dict.items():
-        if bool(
-            session.query(db.years).filter_by(doi=doi, year=key, count=val).first()
-        ):
-            return citation_count, min_year, max_year
-        new_year = db.years(doi=doi, year=key, count=val)
-        session.add(new_year)
-    try:
-        session.commit()
-    except:
-        session.rollback()
-    return citation_count, min_year, max_year
+    return pub_doi, pmid, source, details, citation_count

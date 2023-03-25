@@ -1,11 +1,10 @@
 import multiprocessing
 
 timeout = 1200
-workers = multiprocessing.cpu_count() * 2 + 1
+workers = 2
 bind = "unix:myproject.sock"
 umask = 0o007
 reload = True
 capture_output = True
-loglevel = "debug"
-accesslog = "gunicorn_access.log"
+loglevel = "info"
 errorlog = "gunicorn_error.log"
