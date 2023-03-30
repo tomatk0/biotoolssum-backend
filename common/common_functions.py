@@ -107,8 +107,7 @@ def get_citation_count_and_details(item):
     pub_year = "" if "pubYear" not in item else item["pubYear"] + ", "
     page_info = "" if "pageInfo" not in item else item["pageInfo"]
     details = author_string + title + journal_title + pub_year + page_info
-    citation_count = 0 if "citedByCount" not in item else item["citedByCount"]
-    return citation_count, details
+    return details
 
 
 def get_doi_pmid_source_details_citation_count(pub_doi, pmid, pmcid):
@@ -119,20 +118,20 @@ def get_doi_pmid_source_details_citation_count(pub_doi, pmid, pmcid):
     elif pmcid:
         response = requests.get(f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query={pmcid}&pageSize=1000&format=json")
     if not response.ok:
-        return "Not available", "Not available", "Not available", "Not available", 0
+        return "Not available", "Not available", "Not available", "Not available"
     response = response.json()
     result = response["resultList"]["result"] if response["resultList"] else []
     source = ""
     details = ""
-    citation_count = 0
     for item in result:
         source = item["source"]
         if "doi" in item and item["doi"] == pub_doi:
             pmid = item["id"] if "id" in item else pmid
-            citation_count, details = get_citation_count_and_details(item)
+            details = get_citation_count_and_details(item)
             break
         if "id" in item and (item["id"] == pmid or item["id"] == pmcid):
             pub_doi = item["doi"] if "doi" in item else pub_doi
-            citation_count, details = get_citation_count_and_details(item)
+            details = get_citation_count_and_details(item)
             break
-    return pub_doi, pmid, source, details, citation_count
+    return pub_doi, pmid, source, details
+    

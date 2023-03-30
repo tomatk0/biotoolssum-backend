@@ -1,8 +1,8 @@
-from sqlalchemy import Column, String, Integer, Float, Date, create_engine
+from sqlalchemy import Column, String, Integer, Float, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import NullPool
 
-engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/bio24', poolclass=NullPool)
+engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biof6', poolclass=NullPool)
 base = declarative_base()
 
 
@@ -27,7 +27,7 @@ class tools(base):
     github_updated_at = Column(String(255))
     github_forks = Column(String(255))
     github_contributions = Column(String(255))
-    last_updated = Column(Date)
+    last_updated = Column(String(255))
     min_year = Column(String(255))
     max_year = Column(String(255))
     matrix_queries = []
@@ -79,6 +79,7 @@ class tools(base):
             "elixir_communities": self.elixir_communities,
             "min_year": self.min_year,
             "max_year": self.max_year,
+            "last_updated": self.last_updated,
         }
 
 
@@ -91,9 +92,6 @@ class publications(base):
     pmcid = Column(String(255))
     details = Column(String(5000))
     citations_source = Column(String(255))
-    journal = Column(String(255))
-    impact_factor = Column(Float)
-    citation_count = Column(Integer)
     citations_list = []
 
     def serialize(self):
