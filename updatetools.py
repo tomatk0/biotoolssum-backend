@@ -3,11 +3,12 @@ import common.db as db
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 import math
-from common.common_functions import update_version, update_availability, update_github_info, get_doi_pmid_source_details_citation_count
-from datetime import date
+from common.common_functions import update_version, update_availability, update_github_info, get_years_for_graphs, create_options_for_graphs, create_display_string, get_tools_from_db
+from datetime import date, datetime
 from common.wos import impacts
-from flaskapp import add_years, add_tool
+from flaskapp import add_tool
 import logging
+import json
 
 Session = sessionmaker(bind=db.engine)
 
@@ -107,6 +108,32 @@ def update_functions(functions, id):
             logging.info(f'ROLLING BACK IN UPDATE FUNCTIONS {repr(e)}')
             session.rollback()
 
+def update_documentations(documentations, id):
+    if not documentations:
+        return
+    documentations_dict = {}
+    for d in documentations:
+        doc_url = d['url']
+        if not doc_url or doc_url in documentations_dict:
+            continue
+        documentations_dict[doc_url] = d['type']
+    with Session() as session:
+        documentations_db = session.scalars(select(db.documentations).where(db.documentations.bio_id == id))
+        for documentation in documentations_db:
+            if documentation.url in documentations_dict:
+                documentations_dict.pop(documentation.url)
+            else:
+                logging.info(f'DELETING DOCUMENTATION {documentations.url}')
+                session.delete(documentation)
+        for key, value in documentations_dict.items():
+            logging.info(f'ADDING NEW DOCUMENTATION {key}')
+            session.add(db.documentations(bio_id=id, url=doc_url, type=value))
+        try:
+            session.commit()
+        except Exception as e:
+            logging.info(f'ROLLING BACK IN UPDATE DOCUMENTATIONS {repr(e)}')
+            session.rollback()
+
 def update_platforms(platforms, id):
     platforms = list(set(platforms))
     with Session() as session:
@@ -189,98 +216,68 @@ def update_elixir_platforms_nodes_communities(items, id, table):
             logging.info(f'ROLLING BACK IN ELIXIR {repr(e)}')
             session.rollback()
 
-def update_years(doi, pmid):
-    response = requests.get(
-        f"https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json"
-    )
-    if not response.ok:
-        return 0, False
-    response = response.json()
-    citation_count = response['hitCount']
-    if citation_count < 1:
-        return 0, False
-    number_of_pages = (response["hitCount"] // 1000) + 1
-    year_2023 = 0
-    for i in range(1, number_of_pages + 1):
-        response = requests.get(f"https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/{i}/1000/json") 
-        if not response.ok:
-            return 0, False
-        response = response.json()
-        for item in response["citationList"]["citation"]:
-            year = str(item["pubYear"])
-            if year == "2023":
-                year_2023 += 1
-    with Session() as session:
-        year_2023_db = session.scalars(select(db.years).where(db.years.doi == doi, db.years.year == "2023")).first()
-        if year_2023_db:
-            logging.info(f'YEAR 2023 CITATIONS BEFORE: {year_2023_db.count} AND AFTER: {year_2023}')
-            year_2023_db.count = str(year_2023)
-        try:
-            session.commit()
-        except Exception as e:
-            logging.info(f'ROLLING BACK IN UPDATE YEARS {repr(e)}')
-            session.rollback()
-    if year_2023 > 0:
-        return citation_count, True
-    return citation_count, False
-
-
 def update_publications_and_years(publications, id):
-    min_year, max_year = None, None
-    citation_count = 0
+    tool_citations_count = 0
     impact_factor = 0
     journals = set()
     used_doi = []
+    years_for_graphs = {}
     with Session() as session:
         for publication in publications:
-            pub_doi = '' if not publication['doi'] else publication['doi'].lower()
-            pmid = publication['pmid']
-            pmcid = publication['pmcid']
-            pub_doi, pmid, source, details = get_doi_pmid_source_details_citation_count(pub_doi, pmid, pmcid)
-            if not pub_doi or pub_doi in used_doi:
+            doi = '' if 'doi' not in publication or not publication['doi'] else publication['doi'].lower()
+            pmid = '' if 'pmid' not in publication or not publication['pmid'] else publication['pmid']
+            response = requests.get(f"https://badge.dimensions.ai/details/doi/{doi}/metadata.json?domain=https://bio.tools")
+            if doi:
+                response = requests.get(f"https://badge.dimensions.ai/details/doi/{doi}/metadata.json?domain=https://bio.tools")
+            elif pmid:
+                response = requests.get(f"https://badge.dimensions.ai/details/pmid/{pmid}/metadata.json?domain=https://bio.tools")
+            else:
+                logging.info(f'NOT DOI NOR PMID')
+                continue
+            if not response.ok:
+                continue
+            if not response.json():
+                if not doi:
+                    continue
+                if not bool(session.query(db.publications).filter_by(bio_id=id, doi=doi).first()):
+                    logging.info(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {id} pmid: {pmid}')
+                    session.add(db.publications(bio_id=id, doi=doi, pmid=pmid))
+                continue
+            response = response.json()
+            doi = doi if 'doi' not in response else response['doi']
+            if not doi or doi in used_doi:
                 logging.info(f"PUB DOI MISSING {id} OR DUPLICATE DOI")
                 continue
-            used_doi.append(pub_doi)
-            existing_publication = session.scalars(select(db.publications).where(db.publications.bio_id == id, db.publications.doi == pub_doi)).first()
-            if existing_publication:
-                logging.info(f'UPDATING PUBLICATION {pub_doi}')
-                if pmid:
-                    cit_count, result = update_years(pub_doi, pmid)
-                    citation_count += cit_count
-                    if result:
-                        max_year = '2023'
-                continue
-            if pmid:
-                citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}'
-                cit_count, min_y, max_y = add_years(pub_doi, pmid)
-                citation_count += cit_count
-                if not min_year and min_y:
-                    min_year = min_y
-                if not max_year and max_y:
-                    max_year = max_y
-                if min_y and min_y < min_year:
-                    min_year = min_y
-                if max_y and max_y > max_year:
-                    max_year = max_y
-            journal = '' if not publication['metadata'] else publication['metadata']['journal']
+            used_doi.append(doi)
+            pub_citations_count = 0 if 'times_cited' not in response else response['times_cited']
+            tool_citations_count += pub_citations_count
+            journal = '' if 'journal' not in response or 'title' not in response['journal'] else response['journal']['title']
+            impact = 0
             if journal:
                 journals.add(journal)
                 impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
                 impact_factor += impact
-            citations_source = ''
-            logging.info(f"ADDING NEW PUBLICATION {pub_doi}")
-            session.add(db.publications(doi=pub_doi, bio_id=id, pmid=pmid, pmcid=pmcid, details=details, citations_source=citations_source))
-        tool = session.scalars(select(db.tools).where(db.tools.bio_id == id)).first()
-        if tool:
-            logging.info(f"OLD CITATION COUNT: {tool.citation_count} NEW CITATION COUNT: {citation_count}")
-            if max_year != '2023':
-                max_year = tool.max_year
+            existing_publication = session.scalars(select(db.publications).where(db.publications.bio_id == id, db.publications.doi == doi)).first()
+            if existing_publication:
+                logging.info(f'UPDATING PUBLICATION {doi}, CITATIONS COUNT BEFORE: {existing_publication.citations_count} AFTER: {pub_citations_count}')
+                existing_publication.citations_count = pub_citations_count
+                years_for_graphs[existing_publication.title] = get_years_for_graphs(existing_publication.doi)
+                continue
+            badge_dimensions_id = '' if 'id' not in response else response['id']
+            citations_source = f"https://badge.dimensions.ai/details/id/{badge_dimensions_id}/citations"
+            authors = '' if 'author_names' not in response else response['author_names']
+            date = '' if 'date' not in response else response['date']
+            pmid = '' if 'pmid' not in response else response['pmid']
+            title = '' if 'title' not in response else response['title']
+            years_for_graphs[title] = get_years_for_graphs(doi)
+            logging.info(f"ADDING NEW PUBLICATION {doi}")
+            session.add(db.publications(doi=doi, bio_id=id, pmid=pmid, title=title, authors=authors, journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
         try:
             session.commit()
         except Exception as e:
             logging.info(f'ROLLING BACK IN UPDATE PUBLICATIONS AND YEARS {repr(e)}')
             session.rollback()
-        return citation_count, round(impact_factor, 3), ', '.join(list(journals)), max_year, min_year
+        return tool_citations_count, round(impact_factor, 3), ', '.join(list(journals)), years_for_graphs
 
 def add_matrix_queries(id):
     matrix_queries = ['dna sequence', 'dna secondary structure', 'dna structure', 'genomics', 'rna sequence', 'rna secondary structure', 'rna structure', 'rna omics', 'protein sequence', 'protein secondary structure', 'protein structure', 'protein omics', 'small molecule primary sequence', 'small molecule secondary structure', 'small molecule structure', 'small molecule omics']
@@ -312,9 +309,13 @@ def update_tool(item, id):
                     session.add(tool)
                     session.commit()
                     add_matrix_queries(id)
-                except:
-                    logging.info(f"ROLLBACK IN ADDING A NEW TOOL {id}")
+                except Exception as e:
+                    logging.info(f"ROLLBACK IN ADDING A NEW TOOL {id} {repr(e)}")
                     session.rollback()
+            return
+        tool_last_update = datetime.strptime(tool.last_updated, "%m/%d/%Y")
+        if (tool_last_update.day == date.today().day):
+            logging.info(f'TOOL {id} HAS BEEN UPDATED TODAY ALREADY')
             return
         logging.info(f'UPDATING TOOL {id}')
         tool.name = item["name"]
@@ -323,12 +324,12 @@ def update_tool(item, id):
         tool.description = item["description"]
         tool.maturity = item["maturity"]
         tool.license = item["license"]
-        tool.documentation = item['documentation'][0]['url'] if item['documentation'] else ''
         tool.version = update_version(item["version"])
         tool.availability = update_availability(id)
-        tool.github_url, tool.github_created_at, tool.github_updated_at, tool.github_forks, tool.github_contributions = update_github_info(item['link'])
+        tool.github_url, tool.github_created_at, tool.github_updated_at, tool.github_forks, tool.github_contributions, tool.github_stars = update_github_info(item['link'])
         tool.last_updated = (date.today()).strftime("%m/%d/%Y")
-        tool.citation_count, tool.impact_factor, tool.journals, tool.max_year, tool.min_year = update_publications_and_years(item['publication'], id)
+        tool.citation_count, tool.impact_factor, tool.journals, years_for_graphs = update_publications_and_years(item['publication'], id)
+        tool.options_for_graph = create_options_for_graphs(tool.name, years_for_graphs)
         update_tooltypes(item["toolType"], id)
         update_institutes(item['credit'], id)
         update_topics(item['topic'], id)
@@ -361,8 +362,23 @@ def update_tools_from_given_list(tools_list):
         id = item['biotoolsID']
         update_tool(item, id)
 
+def update_json(query_id):
+    with Session() as session:
+        query = session.scalars(select(db.queries).where(db.queries.id == query_id)).first()
+        result, matrix_tools, matrix_tools_sizes = get_tools_from_db(query.collection_id, query.topic, query.tools_list)
+        resulting_string = create_display_string(query.collection_id, query.topic)
+        data = {"resulting_string": resulting_string, "data": result, "matrix_tools": matrix_tools, "matrix_tools_sizes": matrix_tools_sizes}
+        json_data = json.dumps(data)
+        existing_json = session.scalars(select(db.finished_jsons).where(db.finished_jsons.id == query_id)).first()
+        existing_json.data = json_data.encode()
+        try:
+            logging.info('UPDATING JSON')
+            session.commit()
+        except Exception as e:
+            logging.info(f'ROLLING BACK IN UPDATING JSON {repr(e)}')
+            session.rollback()
 
-def update_tools_from_api(coll_id, topic, tools_list):
+def update_tools_from_api(coll_id, topic, tools_list, query_id):
     coll_id = f'&collectionID=\"{coll_id}\"' if coll_id else ''
     topic = f'&topic=\"{topic}\"' if topic else ''
     if not coll_id and not topic:
@@ -381,14 +397,20 @@ def update_tools_from_api(coll_id, topic, tools_list):
         for item in response['list']:
             id = item['biotoolsID']
             update_tool(item, id)
+    update_json(query_id)
 
 
 def update_tools():
     logging.basicConfig(filename="logfiles/updatetools.log", level=logging.INFO, format="%(asctime)s %(message)s")
     with Session() as session:
+        # query = session.scalars(select(db.queries).where(db.queries.id == '?98?C9ZWG2')).first()
+        # logging.info('----------------------------------------------------------------------------------------------------------------------------------------------------------------------')
+        # logging.info(f'CURRENLTY UPDATING QUERY {query.id}')
+        # update_tools_from_api(query.collection_id, query.topic, query.tools_list, query.id)
         queries = session.scalars(select(db.queries))
         for q in queries:
+            logging.info('----------------------------------------------------------------------------------------------------------------------------------------------------------------------')
             logging.info(f"CURRENTLY UPDATING QUERY {q.id}")
-            update_tools_from_api(q.collection_id, q.topic, q.tools_list)
+            update_tools_from_api(q.collection_id, q.topic, q.tools_list, q.id)
 
 update_tools()

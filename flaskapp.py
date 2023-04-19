@@ -8,9 +8,9 @@ from flask_cors import CORS, cross_origin
 import random
 from common.wos import impacts
 from datetime import date
-from common.common_functions import update_availability, update_github_info, update_version, get_doi_pmid_source_details_citation_count
-import time
+from common.common_functions import update_availability, update_github_info, update_version, get_years_for_graphs, create_options_for_graphs, create_display_string, get_tools_from_db
 from celery import Celery
+import json
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -39,8 +39,7 @@ def add_tool_types(tool_types, bio_id):
     for name in tool_types:
         if not name:
             continue
-        new_tool_type = db.tool_types(bio_id=bio_id, name=name)
-        result.append(new_tool_type)
+        result.append(db.tool_types(bio_id=bio_id, name=name))
     return create_session_commit_data(result, 'ADD TOOL TYPES')
     
 def add_institutes(credit, bio_id):
@@ -48,8 +47,7 @@ def add_institutes(credit, bio_id):
     for item in credit:
         name = item['name']
         if name and item['typeEntity'] == 'Institute':
-            new_institute = db.institutes(bio_id=bio_id, name=name)
-            result.append(new_institute)
+            result.append(db.institutes(bio_id=bio_id, name=name))
     return create_session_commit_data(result, 'ADD INSTITUTES')
 
 def add_topics(topics, bio_id):
@@ -61,8 +59,7 @@ def add_topics(topics, bio_id):
         if not term or term in already_used:
             continue
         already_used.append(term)
-        new_topic = db.topics(bio_id=bio_id, term=term, uri=uri)
-        result.append(new_topic)
+        result.append(db.topics(bio_id=bio_id, term=term, uri=uri))
     return create_session_commit_data(result, 'ADD TOPICS')
 
 def add_functions(functions, bio_id):
@@ -76,8 +73,7 @@ def add_functions(functions, bio_id):
         if not term or term in already_used:
             continue
         already_used.append(term)
-        new_function = db.functions(bio_id=bio_id, term=term, uri=uri)
-        result.append(new_function)
+        result.append(db.functions(bio_id=bio_id, term=term, uri=uri))
     return create_session_commit_data(result, 'ADD FUNCTIONS')
 
 def add_platforms(platforms, bio_id):
@@ -85,8 +81,7 @@ def add_platforms(platforms, bio_id):
     result = []
     for name in platforms:
         if name:
-            new_platform = db.platforms(bio_id=bio_id, name=name)
-            result.append(new_platform)
+            result.append(db.platforms(bio_id=bio_id, name=name))
     return create_session_commit_data(result, 'ADD PLATFORMS')
 
 def add_input_output(functions, bio_id, input_or_output, table):
@@ -99,8 +94,7 @@ def add_input_output(functions, bio_id, input_or_output, table):
         if not term or term in already_used:
             continue
         already_used.append(term)
-        new_item = table(bio_id=bio_id, term=term)
-        result.append(new_item)
+        result.append(table(bio_id=bio_id, term=term))
     return create_session_commit_data(result, input_or_output)
 
 def add_collection_ids(collection_ids, bio_id):
@@ -109,9 +103,22 @@ def add_collection_ids(collection_ids, bio_id):
     for coll_id in collection_ids:
         if not coll_id:
             continue
-        new_coll_id = db.collection_ids(bio_id=bio_id, coll_id=coll_id)
-        result.append(new_coll_id)
+        result.append(db.collection_ids(bio_id=bio_id, coll_id=coll_id))
     return create_session_commit_data(result, 'ADD COLLECTION IDS')
+
+def add_documentations(documentations, bio_id):
+    if not documentations:
+        return True
+    already_used = []
+    result = []
+    for item in documentations:
+        url = item['url']
+        doc_type = item['type']
+        if url in already_used:
+            continue
+        already_used.append(url)
+        result.append(db.documentations(bio_id=bio_id, url=url, type=doc_type[0]))
+    return create_session_commit_data(result, 'ADD DOCUMENTATIONS')
 
 def add_elixir_platforms_nodes_communities(items, bio_id, table):
     if not items:
@@ -125,83 +132,55 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
         result.append(new_item)
     return create_session_commit_data(result, 'ADD ELIXIR')
 
-def add_years(doi, pmid):
-    response = requests.get(
-        f"https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/1/1000/json"
-    )
-    if not response.ok:
-        return 0, None, None
-    response = response.json()
-    citation_count = response["hitCount"]
-    if citation_count < 1:
-        return 0, None, None
-    number_of_pages = (response["hitCount"] // 1000) + 1
-    years_dict = {}
-    for i in range(1, number_of_pages + 1):
-        response = requests.get(
-            f"https://www.ebi.ac.uk/europepmc/webservices/rest/MED/{pmid}/citations/{i}/1000/json"
-        )
-        if not response.ok:
-            return 0, None, None
-        response = response.json()
-        for item in response["citationList"]["citation"]:
-            year = str(item["pubYear"])
-            years_dict[year] = years_dict.get(year, 0) + 1
-    keys_list = list(years_dict.keys())
-    min_year = None if not keys_list else min(keys_list)
-    max_year = None if not keys_list else max(keys_list)
-    with Session() as session:
-        for key, val in years_dict.items():
-            if bool(
-                session.query(db.years).filter_by(doi=doi, year=key, count=val).first()
-            ):
-                return citation_count, min_year, max_year
-            new_year = db.years(doi=doi, year=key, count=val)
-            session.add(new_year)
-        try:
-            session.commit()
-        except Exception as e:
-            print(f'ROLLING BACK IN ADD YEARS DOI {doi} {repr(e)}')
-            session.rollback()
-    return citation_count, min_year, max_year
-
 def add_publications_and_years(publications, bio_id):
-    min_year, max_year = None, None
-    citation_count = 0
+    tool_citations_count = 0
     impact_factor = 0
     journals = set()
     used_doi = []
     publications_result = []
+    years_for_graphs = {}
     for publication in publications:
-        pub_doi = '' if not publication['doi'] else publication['doi'].lower()
-        pmid = publication['pmid']
-        pmcid = publication['pmcid']
-        pub_doi, pmid, source, details = get_doi_pmid_source_details_citation_count(pub_doi, pmid, pmcid)
-        if not pub_doi or pub_doi in used_doi:
-            print(f"PUB DOI MISSING {bio_id} OR DUPLICATE DOI")
+        doi = '' if 'doi' not in publication or not publication['doi'] else publication['doi'].lower()
+        pmid = '' if 'pmid' not in publication or not publication['pmid'] else publication['pmid']
+        if doi:
+            response = requests.get(f"https://badge.dimensions.ai/details/doi/{doi}/metadata.json?domain=https://bio.tools")
+        elif pmid:
+            response = requests.get(f"https://badge.dimensions.ai/details/pmid/{pmid}/metadata.json?domain=https://bio.tools")
+        else:
+            print(f'NOT DOI NOR PMID')
             continue
-        used_doi.append(pub_doi)
-        citations_source = ''
-        if pmid:
-            citations_source = f'https://europepmc.org/search?query=CITES%3A{pmid}_{source}'
-            cit_count, min_y, max_y = add_years(pub_doi, pmid)
-            citation_count += cit_count
-            if not min_year and min_y:
-                min_year = min_y
-            if not max_year and max_y:
-                max_year = max_y
-            if min_y and min_y < min_year:
-                min_year = min_y
-            if max_y and max_y > max_year:
-                max_year = max_y
-        journal = '' if not publication['metadata'] else publication['metadata']['journal']
+        if not response.ok:
+            continue
+        if not response.json():
+            if not doi:
+                continue
+            print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {bio_id}')
+            new_publication = db.publications(doi=doi, bio_id=bio_id)
+            publications_result.append(new_publication)
+            continue
+        response = response.json()
+        doi = doi if 'doi' not in response else response['doi']
+        if not doi or doi in used_doi:
+            print(f'DOI MISSING {bio_id} OR DUPLICATE DOI')
+            continue
+        used_doi.append(doi)
+        badge_dimensions_id = '' if 'id' not in response else response['id']
+        citations_source = f"https://badge.dimensions.ai/details/id/{badge_dimensions_id}/citations"
+        authors = '' if 'author_names' not in response else response['author_names']
+        date = '' if 'date' not in response else response['date']
+        journal = '' if 'journal' not in response or 'title' not in response['journal'] else response['journal']['title']
+        impact = 0
         if journal:
             journals.add(journal)
             impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
-            impact_factor += impact         
-        new_publication = db.publications(doi=pub_doi, bio_id=bio_id, pmid=pmid, pmcid=pmcid, details=details, citations_source=citations_source)
-        publications_result.append(new_publication)
-    return citation_count, round(impact_factor, 3), ', '.join(list(journals)), min_year, max_year, publications_result
+            impact_factor += impact 
+        pmid = '' if 'pmid' not in response else response['pmid']
+        pub_citations_count = 0 if 'times_cited' not in response else response['times_cited']
+        tool_citations_count += pub_citations_count
+        title = '' if 'title' not in response else response['title']
+        years_for_graphs[title] = get_years_for_graphs(doi)
+        publications_result.append(db.publications(doi=doi, bio_id=bio_id, pmid=pmid, title=title, authors=authors, journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
+    return tool_citations_count, round(impact_factor, 3), ', '.join(list(journals)), publications_result, years_for_graphs
 
 def add_tool(item, id):
     if not add_tool_types(item['toolType'], id):
@@ -220,16 +199,19 @@ def add_tool(item, id):
         return None
     if not add_collection_ids(item['collectionID'], id):
         return None
+    if not add_documentations(item['documentation'], id):
+        return None
     if not add_elixir_platforms_nodes_communities(item['elixirPlatform'], id, db.elixir_platforms):
         return None
     if not add_elixir_platforms_nodes_communities(item['elixirNode'], id, db.elixir_nodes):
         return None
     if not add_elixir_platforms_nodes_communities(item['elixirCommunity'], id, db.elixir_communities):
         return None
-    citation_count, impact_factor, journals, min_year, max_year, publications_result = add_publications_and_years(item['publication'], id)
+    citation_count, impact_factor, journals, publications_result, years_for_graphs = add_publications_and_years(item['publication'], id)
     if not create_session_commit_data(publications_result, 'PUBLICATIONS'):
         return None
     name = item['name']
+    options_for_graph = create_options_for_graphs(name, years_for_graphs)
     version = update_version(item['version'])
     bio_link = f'https://bio.tools/{id}'
     homepage = item['homepage']
@@ -237,50 +219,13 @@ def add_tool(item, id):
     maturity = item['maturity']
     license = item['license']
     availability = update_availability(id)
-    documentation = item['documentation'][0]['url'] if item['documentation'] else ''
-    url, created_at, updated_at, forks, contributions = update_github_info(item['link'])
+    url, created_at, updated_at, forks, contributions, stars = update_github_info(item['link'])
     last_updated = (date.today()).strftime("%m/%d/%Y")
-    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, documentation=documentation, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions, last_updated=last_updated, min_year=min_year, max_year=max_year)
+    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions, github_stars=stars, last_updated=last_updated, options_for_graph=options_for_graph)
     return tool
-        
-def get_publications_and_years_from_table(tool):
-    with Session() as session:
-        publications_list = []
-        publications = select(db.publications).where(db.publications.bio_id == tool.bio_id)
-        for publication in session.scalars(publications):
-            citations_list = []
-            years = select(db.years).where(db.years.doi == publication.doi)
-            for year in session.scalars(years):
-                citations_list.append(year.serialize())
-            publication.citations_list = citations_list
-            publications_list.append(publication.serialize())
-    return publications_list
-
-def get_data_from_table(tool, table):
-    with Session() as session:
-        result = []
-        query = select(table).where(table.bio_id == tool.bio_id)
-        for item in session.scalars(query):
-            result.append(item.serialize())
-    return result
-
-def get_lists_for_tool(tool):
-    tool.matrix_queries = get_data_from_table(tool, db.matrix_queries)
-    tool.publications = get_publications_and_years_from_table(tool)
-    tool.functions = get_data_from_table(tool, db.functions)
-    tool.topics = get_data_from_table(tool, db.topics)
-    tool.institutes = get_data_from_table(tool, db.institutes)
-    tool.platforms = get_data_from_table(tool, db.platforms)
-    tool.tool_types = get_data_from_table(tool, db.tool_types)
-    tool.inputs = get_data_from_table(tool, db.inputs)
-    tool.outputs = get_data_from_table(tool, db.outputs)
-    tool.collection_ids = get_data_from_table(tool, db.collection_ids)
-    tool.elixir_platforms = get_data_from_table(tool, db.elixir_platforms)
-    tool.elixir_nodes = get_data_from_table(tool, db.elixir_nodes)
-    tool.elixir_communities = get_data_from_table(tool, db.elixir_communities)
 
 def get_tools_from_given_list(tools_list):
-    split_list = tools_list.split(',')
+    split_list = tools_list.replace(' ', '').split(',')
     if not split_list or split_list[0] == '':
         return
     total = 0
@@ -307,7 +252,8 @@ def get_tools_from_given_list(tools_list):
     print(f'TOOLS FROM API {total}')
     if total > 0:
         add_matrix_queries_tools_list(tools_list)
-        create_new_query('', '', tools_list)
+        query_id = create_new_query('', '', tools_list)
+        create_new_json(query_id)  
 
 @celery.task(ignore_result=True)
 def get_tools_from_api(coll_id, topic, tools_list):
@@ -343,39 +289,8 @@ def get_tools_from_api(coll_id, topic, tools_list):
     print(f'TOOLS FROM API {total}')
     if total > 0:
         add_matrix_queries(coll_id, topic)
-        create_new_query(coll_id, topic, '')
-
-def modify_tools_list(found_tools, tools_list):
-    new_tools_list = ''
-    for item in tools_list.split(','):
-        if item not in found_tools:
-            new_tools_list += (item + ',')
-    return new_tools_list[:-1]
-
-def get_tools_from_db(coll_id, topic, tools_list):
-    result = []
-    if tools_list:
-        with Session() as session:
-            found_tools = []
-            for tool in tools_list.split(','):
-                tool_select = select(db.tools).where(db.tools.bio_id == tool)
-                for t in session.scalars(tool_select):
-                    found_tools.append(tool)
-                    print(f'Processing {t.bio_id} from DB (list)')
-                    get_lists_for_tool(t)
-                    result.append(t.serialize())
-            print(f'TOOLS FROM DB: {len(result)}')
-            return result, modify_tools_list(found_tools, tools_list)
-    with Session() as session:
-        query = select(db.tools).where(db.tools.bio_id == db.collection_ids.bio_id, db.collection_ids.coll_id.ilike(f'{coll_id}'))
-        if topic:
-            query = select(db.tools).where(db.tools.bio_id == db.topics.bio_id, db.topics.term.ilike(f'{topic}'))
-        for tool in session.scalars(query):
-            print(f'Processing {tool.bio_id} from DB')
-            get_lists_for_tool(tool)
-            result.append(tool.serialize())
-        print(f'TOOLS FROM DB: {len(result)}')
-        return result, tools_list
+        query_id = create_new_query(coll_id, topic, '')
+        create_new_json(query_id)   
 
 def create_hash():
     result = ''
@@ -406,12 +321,11 @@ def get_data_from_frontend():
     with Session() as session:
         request_data = request.get_json()
         id = request_data['id']
-        query_select = select(db.queries).where(db.queries.id == id)
-        query = session.scalars(query_select).first()
-        if not query:
+        encoded_json = session.scalars(select(db.finished_jsons).where(db.finished_jsons.id == id)).first()
+        if not encoded_json:
             return jsonify(resulting_string="This query is not in the database.", data=[])
-        result, _ = get_tools_from_db(query.collection_id, query.topic, query.tools_list)
-    return jsonify(resulting_string=create_display_string(query.collection_id, query.topic), data=result) 
+        json_data = encoded_json.data.decode('utf-8')
+    return json.loads(json_data)
 
 
 @app.route("/get_queries", methods=["GET"])
@@ -472,25 +386,34 @@ def add_matrix_queries(coll_id, topic):
             print(f'ROLLING BACK IN MATRIX QUERIES {repr(e)}')
             session.rollback()
 
-def create_display_string(coll_id, topic):
-    if coll_id:
-        return f'All tools from the {coll_id} collection.'
-    elif topic:
-        return f'All tools about the {topic} topic.'
-    return 'All tools from a custom query.'
-
 def create_new_query(coll_id, topic, tools_list):
     if coll_id:
         coll_id = coll_id.split('"')[1]
     elif topic:
         topic = topic.split('"')[1]
     with Session() as session:
-        new_query = db.queries(id=create_hash(), collection_id=coll_id, topic=topic, tools_list=tools_list)
+        query_id = id=create_hash()
+        new_query = db.queries(id=query_id, collection_id=coll_id, topic=topic, tools_list=tools_list)
         session.add(new_query)
         try:
             session.commit()
         except Exception as e:
             print(f'ROLLING BACK IN CREATING NEW QUERY {repr(e)}')
+            session.rollback()
+    return query_id
+
+def create_new_json(query_id):
+    with Session() as session:
+        query = session.scalars(select(db.queries).where(db.queries.id == query_id)).first()
+        result, matrix_tools, matrix_tools_sizes = get_tools_from_db(query.collection_id, query.topic, query.tools_list)
+        resulting_string = create_display_string(query.collection_id, query.topic)
+        data = {"resulting_string": resulting_string, "data": result, "matrix_tools": matrix_tools, "matrix_tools_sizes": matrix_tools_sizes}
+        json_data = json.dumps(data)
+        session.add(db.finished_jsons(id=query.id, data=json_data.encode()))
+        try:
+            session.commit()
+        except Exception as e:
+            print(f'ROLLING BACK IN CREATING NEW JSON {repr(e)}')
             session.rollback()
 
 if __name__ == "__main__":

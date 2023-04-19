@@ -1,8 +1,10 @@
 from sqlalchemy import Column, String, Integer, Float, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import NullPool
+from sqlalchemy.types import LargeBinary
+import json
 
-engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biof6', poolclass=NullPool)
+engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/bio20', poolclass=NullPool)
 base = declarative_base()
 
 
@@ -21,15 +23,14 @@ class tools(base):
     impact_factor = Column(Float)
     journals = Column(String(255))
     availability = Column(String(255))
-    documentation = Column(String(255))
     github_url = Column(String(255))
     github_created_at = Column(String(255))
     github_updated_at = Column(String(255))
-    github_forks = Column(String(255))
-    github_contributions = Column(String(255))
+    github_forks = Column(Integer)
+    github_contributions = Column(Integer)
+    github_stars = Column(Integer)
     last_updated = Column(String(255))
-    min_year = Column(String(255))
-    max_year = Column(String(255))
+    options_for_graph = Column(LargeBinary)
     matrix_queries = []
     publications = []
     functions = []
@@ -40,6 +41,7 @@ class tools(base):
     inputs = []
     outputs = []
     collection_ids = []
+    documentations = []
     elixir_platforms = []
     elixir_nodes = []
     elixir_communities = []
@@ -58,12 +60,12 @@ class tools(base):
             "impact_factor": self.impact_factor,
             "journals": self.journals,
             "availability": self.availability,
-            "documentation": self.documentation,
             "github_url": self.github_url,
             "github_created_at": self.github_created_at,
             "github_updated_at": self.github_updated_at,
             "github_forks": self.github_forks,
             "github_contributions": self.github_contributions,
+            "github_stars": self.github_stars,
             "matrix_queries": self.matrix_queries,
             "publications": self.publications,
             "functions": self.functions,
@@ -74,12 +76,12 @@ class tools(base):
             "inputs": self.inputs,
             "outputs": self.outputs,
             "collection_ids": self.collection_ids,
+            "documentations": self.documentations,
             "elixir_platforms": self.elixir_platforms,
             "elixir_nodes": self.elixir_nodes,
             "elixir_communities": self.elixir_communities,
-            "min_year": self.min_year,
-            "max_year": self.max_year,
             "last_updated": self.last_updated,
+            "options_for_graph": None if not self.options_for_graph else json.loads(self.options_for_graph.decode('utf-8'))
         }
 
 
@@ -89,8 +91,12 @@ class publications(base):
     doi = Column(String(255), primary_key=True)
     bio_id = Column(String(255), primary_key=True)
     pmid = Column(String(255))
-    pmcid = Column(String(255))
-    details = Column(String(5000))
+    title = Column(String(255))
+    authors = Column(String(5000))
+    journal = Column(String(255))
+    impact = Column(Float)
+    publication_date = Column(String(255))
+    citations_count = Column(Integer)
     citations_source = Column(String(255))
     citations_list = []
 
@@ -98,8 +104,12 @@ class publications(base):
         return {
             "doi": self.doi,
             "pmid": self.pmid,
-            "pmcid": self.pmcid,
-            "details": self.details,
+            "title": self.title,
+            "authors": self.authors,
+            "journal": self.journal,
+            "impact": self.impact,
+            "publication_date": self.publication_date,
+            "citations_count": self.citations_count,
             "citations_source": self.citations_source,
             "citations_list": self.citations_list,
         }
@@ -197,6 +207,18 @@ class collection_ids(base):
     def serialize(self):
         return {"coll_id": self.coll_id}
 
+class documentations(base):
+    __tablename__ = "documentations"
+
+    bio_id = Column(String(255), primary_key=True)
+    url = Column(String(255), primary_key=True)
+    type = Column(String(255))
+
+    def serialize(self):
+        return {
+            "url": self.url,
+            "type": self.type
+        }
 
 class elixir_platforms(base):
     __tablename__ = "elixir_platforms"
@@ -245,6 +267,12 @@ class matrix_queries(base):
 
     def serialize(self):
         return {"matrix_query": self.matrix_query}
+    
+class finished_jsons(base):
+    __tablename__ = "finished_jsons"
+
+    id = Column(String(255), primary_key=True)
+    data = Column(LargeBinary(100000000))
 
 
 base.metadata.create_all(engine)
