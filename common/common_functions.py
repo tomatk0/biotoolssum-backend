@@ -252,7 +252,6 @@ def get_tools_from_db(coll_id, topic, tools_list):
                 t = session.scalars(select(db.tools).where(db.tools.bio_id == tool)).first()
                 get_lists_for_tool(t)
                 result.append(t.serialize())
-            print(f'TOOLS FROM DB: {len(result)}')
             matrix_tools, matrix_tools_sizes = separate_tools_by_matrix_queries(result)
             return result, matrix_tools, matrix_tools_sizes
         
@@ -263,7 +262,6 @@ def get_tools_from_db(coll_id, topic, tools_list):
         for tool in session.scalars(query):
             get_lists_for_tool(tool)
             result.append(tool.serialize())
-        print(f'TOOLS FROM DB: {len(result)}')
         matrix_tools, matrix_tools_sizes = separate_tools_by_matrix_queries(result)
         return result, matrix_tools, matrix_tools_sizes
     

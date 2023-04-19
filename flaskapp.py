@@ -11,6 +11,7 @@ from datetime import date
 from common.common_functions import update_availability, update_github_info, update_version, get_years_for_graphs, create_options_for_graphs, create_display_string, get_tools_from_db
 from celery import Celery
 import json
+import logging
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -19,7 +20,7 @@ app.app_context().push()
 cors = CORS(app)
 
 Session = sessionmaker(bind=db.engine, autoflush=False)
-
+logging.basicConfig(filename="logfiles/flaskapp.log", level=logging.INFO, format="%(asctime)s %(message)s")
 celery = Celery(app.name, broker='amqp://myuser:mypassword@localhost:5672/myvhost', backend='db+mysql+pymysql://biotoolsDB:password@localhost/brokerDB')
 
 def create_session_commit_data(data, location):
@@ -29,7 +30,7 @@ def create_session_commit_data(data, location):
             session.commit()
             return True
         except Exception as e:
-            print(f'ROLLING BACK IN {location} {repr(e)}')
+            logging.info(f'ROLLING BACK IN {location} {repr(e)}')
             session.rollback()
             return False
 
@@ -147,21 +148,21 @@ def add_publications_and_years(publications, bio_id):
         elif pmid:
             response = requests.get(f"https://badge.dimensions.ai/details/pmid/{pmid}/metadata.json?domain=https://bio.tools")
         else:
-            print(f'NOT DOI NOR PMID')
+            logging.info(f'NOT DOI NOR PMID')
             continue
         if not response.ok:
             continue
         if not response.json():
             if not doi:
                 continue
-            print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {bio_id}')
+            logging.info(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {bio_id}')
             new_publication = db.publications(doi=doi, bio_id=bio_id)
             publications_result.append(new_publication)
             continue
         response = response.json()
         doi = doi if 'doi' not in response else response['doi']
         if not doi or doi in used_doi:
-            print(f'DOI MISSING {bio_id} OR DUPLICATE DOI')
+            logging.info(f'DOI MISSING {bio_id} OR DUPLICATE DOI')
             continue
         used_doi.append(doi)
         badge_dimensions_id = '' if 'id' not in response else response['id']
@@ -239,7 +240,7 @@ def get_tools_from_given_list(tools_list):
                     continue
                 item = response['list'][0]
                 id = item['biotoolsID']
-                print(f'Processing {id} from API (list)')
+                logging.info(f'Processing {id} from API (list)')
                 tool = add_tool(item, id)
                 if tool:
                     session.add(tool)
@@ -247,9 +248,9 @@ def get_tools_from_given_list(tools_list):
         try:
             session.commit()
         except Exception as e:
-            print(f'ROLLING BACK IN GET TOOLS FROM GIVEN LIST {repr(e)}')
+            logging.info(f'ROLLING BACK IN GET TOOLS FROM GIVEN LIST {repr(e)}')
             session.rollback()
-    print(f'TOOLS FROM API {total}')
+    logging.info(f'TOOLS FROM API {total}')
     if total > 0:
         add_matrix_queries_tools_list(tools_list)
         query_id = create_new_query('', '', tools_list)
@@ -276,7 +277,7 @@ def get_tools_from_api(coll_id, topic, tools_list):
             response = response.json()
             for item in response['list']:
                 id = item['biotoolsID']
-                print(f'Processing {id} from API')
+                logging.info(f'Processing {id} from API')
                 tool = add_tool(item, id)
                 if tool:
                     session.add(tool)
@@ -284,9 +285,9 @@ def get_tools_from_api(coll_id, topic, tools_list):
         try:
             session.commit()
         except Exception as e:
-            print(f'ROLLING BACK IN GET TOOLS FROM API {repr(e)}')
+            logging.info(f'ROLLING BACK IN GET TOOLS FROM API {repr(e)}')
             session.rollback()
-    print(f'TOOLS FROM API {total}')
+    logging.info(f'TOOLS FROM API {total}')
     if total > 0:
         add_matrix_queries(coll_id, topic)
         query_id = create_new_query(coll_id, topic, '')
@@ -358,7 +359,7 @@ def add_matrix_queries_tools_list(tools_list):
         try:
             session.commit()
         except Exception as e:
-            print(f'ROLLING BACK IN MATRIX QUERIES {repr(e)}')
+            logging.info(f'ROLLING BACK IN MATRIX QUERIES {repr(e)}')
             session.rollback()
                 
 def add_matrix_queries(coll_id, topic):
@@ -383,7 +384,7 @@ def add_matrix_queries(coll_id, topic):
         try:
             session.commit()
         except Exception as e:
-            print(f'ROLLING BACK IN MATRIX QUERIES {repr(e)}')
+            logging.info(f'ROLLING BACK IN MATRIX QUERIES {repr(e)}')
             session.rollback()
 
 def create_new_query(coll_id, topic, tools_list):
@@ -398,7 +399,7 @@ def create_new_query(coll_id, topic, tools_list):
         try:
             session.commit()
         except Exception as e:
-            print(f'ROLLING BACK IN CREATING NEW QUERY {repr(e)}')
+            logging.info(f'ROLLING BACK IN CREATING NEW QUERY {repr(e)}')
             session.rollback()
     return query_id
 
@@ -406,6 +407,7 @@ def create_new_json(query_id):
     with Session() as session:
         query = session.scalars(select(db.queries).where(db.queries.id == query_id)).first()
         result, matrix_tools, matrix_tools_sizes = get_tools_from_db(query.collection_id, query.topic, query.tools_list)
+        logging.info(f'TOOLS FROM DB: {len(result)}')
         resulting_string = create_display_string(query.collection_id, query.topic)
         data = {"resulting_string": resulting_string, "data": result, "matrix_tools": matrix_tools, "matrix_tools_sizes": matrix_tools_sizes}
         json_data = json.dumps(data)
@@ -413,7 +415,7 @@ def create_new_json(query_id):
         try:
             session.commit()
         except Exception as e:
-            print(f'ROLLING BACK IN CREATING NEW JSON {repr(e)}')
+            logging.info(f'ROLLING BACK IN CREATING NEW JSON {repr(e)}')
             session.rollback()
 
 if __name__ == "__main__":

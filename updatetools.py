@@ -366,6 +366,7 @@ def update_json(query_id):
     with Session() as session:
         query = session.scalars(select(db.queries).where(db.queries.id == query_id)).first()
         result, matrix_tools, matrix_tools_sizes = get_tools_from_db(query.collection_id, query.topic, query.tools_list)
+        logging.info(f'TOOLS FROM DB: {len(result)}')
         resulting_string = create_display_string(query.collection_id, query.topic)
         data = {"resulting_string": resulting_string, "data": result, "matrix_tools": matrix_tools, "matrix_tools_sizes": matrix_tools_sizes}
         json_data = json.dumps(data)
