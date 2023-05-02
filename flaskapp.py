@@ -11,7 +11,6 @@ from datetime import date
 from common.common_functions import update_availability, update_github_info, update_version, get_years_for_graphs, create_options_for_graphs, create_display_string, get_tools_from_db
 from celery import Celery
 import json
-import logging
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -20,7 +19,6 @@ app.app_context().push()
 cors = CORS(app)
 
 Session = sessionmaker(bind=db.engine, autoflush=False)
-logging.basicConfig(filename="logfiles/flaskapp.log", level=logging.INFO, format="%(asctime)s %(message)s")
 celery = Celery(app.name, broker='amqp://myuser:mypassword@localhost:5672/myvhost', backend='db+mysql+pymysql://biotoolsDB:password@localhost/brokerDB')
 
 def create_session_commit_data(data, location):
@@ -30,7 +28,7 @@ def create_session_commit_data(data, location):
             session.commit()
             return True
         except Exception as e:
-            logging.info(f'ROLLING BACK IN {location} {repr(e)}')
+            print(f'ROLLING BACK IN {location} {repr(e)}')
             session.rollback()
             return False
 
@@ -63,19 +61,38 @@ def add_topics(topics, bio_id):
         result.append(db.topics(bio_id=bio_id, term=term, uri=uri))
     return create_session_commit_data(result, 'ADD TOPICS')
 
-def add_functions(functions, bio_id):
-    if not functions:
+def add_functions(items, bio_id):
+    if not items:
         return True
-    already_used = []
-    result = []
-    for item in functions[0]['operation']:
-        term = item['term']
-        uri = item['uri']
-        if not term or term in already_used:
-            continue
-        already_used.append(term)
-        result.append(db.functions(bio_id=bio_id, term=term, uri=uri))
-    return create_session_commit_data(result, 'ADD FUNCTIONS')
+    functions = []
+    operations = []
+    inputs = []
+    outputs = []
+    for i, item in enumerate(items):
+        id = f'{bio_id}_{i+1}'
+        functions.append(db.functions(function_id=id, bio_id=bio_id))
+        already_used = []
+        for o in item['operation']:
+            term = o['term']
+            if not term or term in already_used:
+                continue
+            operations.append(db.operations(function_id=id, term=term, uri=o['uri']))
+            already_used.append(term)
+        already_used = []
+        for input in item['input']:
+            term = input['data']['term']
+            if not term or term in already_used:
+                continue
+            inputs.append(db.inputs(function_id=id, term=term))
+            already_used.append(term)
+        already_used = []
+        for output in item['output']:
+            term = output['data']['term']
+            if not term or term in already_used:
+                continue
+            outputs.append(db.outputs(function_id=id, term=term))
+            already_used.append(term)
+    return create_session_commit_data(functions, 'ADD FUNCTIONS') and create_session_commit_data(operations, 'ADD OPERATIONS') and create_session_commit_data(inputs, 'ADD INPUTS') and create_session_commit_data(outputs, 'ADD OUTPUTS')
 
 def add_platforms(platforms, bio_id):
     platforms = list(set(platforms))
@@ -85,18 +102,18 @@ def add_platforms(platforms, bio_id):
             result.append(db.platforms(bio_id=bio_id, name=name))
     return create_session_commit_data(result, 'ADD PLATFORMS')
 
-def add_input_output(functions, bio_id, input_or_output, table):
-    if not functions:
-        return True
-    already_used = []
-    result = []
-    for item in functions[0][input_or_output]:
-        term = item['data']['term']
-        if not term or term in already_used:
-            continue
-        already_used.append(term)
-        result.append(table(bio_id=bio_id, term=term))
-    return create_session_commit_data(result, input_or_output)
+# def add_input_output(functions, bio_id, input_or_output, table):
+#     if not functions:
+#         return True
+#     already_used = []
+#     result = []
+#     for item in functions[0][input_or_output]:
+#         term = item['data']['term']
+#         if not term or term in already_used:
+#             continue
+#         already_used.append(term)
+#         result.append(table(bio_id=bio_id, term=term))
+#     return create_session_commit_data(result, input_or_output)
 
 def add_collection_ids(collection_ids, bio_id):
     collection_ids = list(set(collection_ids))
@@ -135,53 +152,53 @@ def add_elixir_platforms_nodes_communities(items, bio_id, table):
 
 def add_publications_and_years(publications, bio_id):
     tool_citations_count = 0
-    impact_factor = 0
-    journals = set()
     used_doi = []
     publications_result = []
     years_for_graphs = {}
-    for publication in publications:
-        doi = '' if 'doi' not in publication or not publication['doi'] else publication['doi'].lower()
-        pmid = '' if 'pmid' not in publication or not publication['pmid'] else publication['pmid']
-        if doi:
-            response = requests.get(f"https://badge.dimensions.ai/details/doi/{doi}/metadata.json?domain=https://bio.tools")
-        elif pmid:
-            response = requests.get(f"https://badge.dimensions.ai/details/pmid/{pmid}/metadata.json?domain=https://bio.tools")
-        else:
-            logging.info(f'NOT DOI NOR PMID')
-            continue
-        if not response.ok:
-            continue
-        if not response.json():
-            if not doi:
+    try:
+        for publication in publications:
+            doi = '' if 'doi' not in publication or not publication['doi'] else publication['doi'].lower()
+            pmid = '' if 'pmid' not in publication or not publication['pmid'] else publication['pmid']
+            if doi:
+                response = requests.get(f"https://badge.dimensions.ai/details/doi/{doi}/metadata.json?domain=https://bio.tools")
+            elif pmid:
+                response = requests.get(f"https://badge.dimensions.ai/details/pmid/{pmid}/metadata.json?domain=https://bio.tools")
+            else:
+                print(f'NOT DOI NOR PMID')
                 continue
-            logging.info(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {bio_id}')
-            new_publication = db.publications(doi=doi, bio_id=bio_id)
-            publications_result.append(new_publication)
-            continue
-        response = response.json()
-        doi = doi if 'doi' not in response else response['doi']
-        if not doi or doi in used_doi:
-            logging.info(f'DOI MISSING {bio_id} OR DUPLICATE DOI')
-            continue
-        used_doi.append(doi)
-        badge_dimensions_id = '' if 'id' not in response else response['id']
-        citations_source = f"https://badge.dimensions.ai/details/id/{badge_dimensions_id}/citations"
-        authors = '' if 'author_names' not in response else response['author_names']
-        date = '' if 'date' not in response else response['date']
-        journal = '' if 'journal' not in response or 'title' not in response['journal'] else response['journal']['title']
-        impact = 0
-        if journal:
-            journals.add(journal)
-            impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
-            impact_factor += impact 
-        pmid = '' if 'pmid' not in response else response['pmid']
-        pub_citations_count = 0 if 'times_cited' not in response else response['times_cited']
-        tool_citations_count += pub_citations_count
-        title = '' if 'title' not in response else response['title']
-        years_for_graphs[title] = get_years_for_graphs(doi)
-        publications_result.append(db.publications(doi=doi, bio_id=bio_id, pmid=pmid, title=title, authors=authors, journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
-    return tool_citations_count, round(impact_factor, 3), ', '.join(list(journals)), publications_result, years_for_graphs
+            if not response.ok:
+                continue
+            if not response.json():
+                if not doi:
+                    continue
+                print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {bio_id}')
+                new_publication = db.publications(doi=doi, bio_id=bio_id)
+                publications_result.append(new_publication)
+                continue
+            response = response.json()
+            doi = doi if 'doi' not in response else response['doi']
+            if not doi or doi in used_doi:
+                print(f'DOI MISSING {bio_id} OR DUPLICATE DOI')
+                continue
+            used_doi.append(doi)
+            badge_dimensions_id = '' if 'id' not in response else response['id']
+            citations_source = f"https://badge.dimensions.ai/details/id/{badge_dimensions_id}/citations"
+            authors = '' if 'author_names' not in response else response['author_names']
+            date = '' if 'date' not in response else response['date']
+            journal = '' if 'journal' not in response or 'title' not in response['journal'] else response['journal']['title']
+            impact = 0
+            if journal:
+                impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
+            pmid = '' if 'pmid' not in response else response['pmid']
+            pub_citations_count = 0 if 'times_cited' not in response else response['times_cited']
+            tool_citations_count += pub_citations_count
+            title = '' if 'title' not in response else response['title']
+            years_for_graphs[title] = get_years_for_graphs(doi)
+            publications_result.append(db.publications(doi=doi, bio_id=bio_id, pmid=pmid, title=title, authors=authors, journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
+        return tool_citations_count, publications_result, years_for_graphs
+    except Exception as e:
+        print(f'ERROR IN ADD PUBLICATIONS AND YEARS {repr(e)}')
+        return 0, None, None
 
 def add_tool(item, id):
     if not add_tool_types(item['toolType'], id):
@@ -194,10 +211,6 @@ def add_tool(item, id):
         return None
     if not add_platforms(item['operatingSystem'], id):
         return None
-    if not add_input_output(item['function'], id, 'input', db.inputs):
-        return None
-    if not add_input_output(item['function'], id, 'output', db.outputs):
-        return None
     if not add_collection_ids(item['collectionID'], id):
         return None
     if not add_documentations(item['documentation'], id):
@@ -208,7 +221,7 @@ def add_tool(item, id):
         return None
     if not add_elixir_platforms_nodes_communities(item['elixirCommunity'], id, db.elixir_communities):
         return None
-    citation_count, impact_factor, journals, publications_result, years_for_graphs = add_publications_and_years(item['publication'], id)
+    citation_count, publications_result, years_for_graphs = add_publications_and_years(item['publication'], id)
     if not create_session_commit_data(publications_result, 'PUBLICATIONS'):
         return None
     name = item['name']
@@ -222,7 +235,7 @@ def add_tool(item, id):
     availability = update_availability(id)
     url, created_at, updated_at, forks, contributions, stars = update_github_info(item['link'])
     last_updated = (date.today()).strftime("%m/%d/%Y")
-    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count,impact_factor=impact_factor,journals=journals, availability = availability, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions, github_stars=stars, last_updated=last_updated, options_for_graph=options_for_graph)
+    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count, availability = availability, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions, github_stars=stars, last_updated=last_updated, options_for_graph=options_for_graph)
     return tool
 
 def get_tools_from_given_list(tools_list):
@@ -240,7 +253,7 @@ def get_tools_from_given_list(tools_list):
                     continue
                 item = response['list'][0]
                 id = item['biotoolsID']
-                logging.info(f'Processing {id} from API (list)')
+                print(f'Processing {id} from API (list)')
                 tool = add_tool(item, id)
                 if tool:
                     session.add(tool)
@@ -248,11 +261,11 @@ def get_tools_from_given_list(tools_list):
         try:
             session.commit()
         except Exception as e:
-            logging.info(f'ROLLING BACK IN GET TOOLS FROM GIVEN LIST {repr(e)}')
+            print(f'ROLLING BACK IN GET TOOLS FROM GIVEN LIST {repr(e)}')
             session.rollback()
-    logging.info(f'TOOLS FROM API {total}')
+    print(f'TOOLS FROM API {total}')
     if total > 0:
-        add_matrix_queries_tools_list(tools_list)
+        add_queries_matrix_data_cycle_list(tools_list)
         query_id = create_new_query('', '', tools_list)
         create_new_json(query_id)  
 
@@ -277,7 +290,7 @@ def get_tools_from_api(coll_id, topic, tools_list):
             response = response.json()
             for item in response['list']:
                 id = item['biotoolsID']
-                logging.info(f'Processing {id} from API')
+                print(f'Processing {id} from API')
                 tool = add_tool(item, id)
                 if tool:
                     session.add(tool)
@@ -285,11 +298,11 @@ def get_tools_from_api(coll_id, topic, tools_list):
         try:
             session.commit()
         except Exception as e:
-            logging.info(f'ROLLING BACK IN GET TOOLS FROM API {repr(e)}')
+            print(f'ROLLING BACK IN GET TOOLS FROM API {repr(e)}')
             session.rollback()
-    logging.info(f'TOOLS FROM API {total}')
+    print(f'TOOLS FROM API {total}')
     if total > 0:
-        add_matrix_queries(coll_id, topic)
+        add_queries_matrix_data_cycle(coll_id, topic)
         query_id = create_new_query(coll_id, topic, '')
         create_new_json(query_id)   
 
@@ -324,7 +337,7 @@ def get_data_from_frontend():
         id = request_data['id']
         encoded_json = session.scalars(select(db.finished_jsons).where(db.finished_jsons.id == id)).first()
         if not encoded_json:
-            return jsonify(resulting_string="This query is not in the database.", data=[])
+            return jsonify(resulting_string="This query is not in the database", data=[])
         json_data = encoded_json.data.decode('utf-8')
     return json.loads(json_data)
 
@@ -338,11 +351,12 @@ def get_queries():
             result.append(query)
     return render_template("get_queries.html", content=result)
 
-def add_matrix_queries_tools_list(tools_list):
+def add_queries_matrix_data_cycle_list(tools_list):
     split_list = tools_list.split(',')
     if split_list[0] == '':
         return
     matrix_queries = ['dna sequence', 'dna secondary structure', 'dna structure', 'genomics', 'rna sequence', 'rna secondary structure', 'rna structure', 'rna omics', 'protein sequence', 'protein secondary structure', 'protein structure', 'protein omics', 'small molecule primary sequence', 'small molecule secondary structure', 'small molecule structure', 'small molecule omics']
+    data_cycle_queries = ['acquisition', 'data processing', 'analysis', 'storage', 'share', 'data management', 'fair']
     with Session() as session:
         for item in split_list:
             for query in matrix_queries:
@@ -354,16 +368,27 @@ def add_matrix_queries_tools_list(tools_list):
                 response = response.json()
                 if response['count'] < 1:
                     continue
-                new_query = db.matrix_queries(bio_id=item, matrix_query=query)
-                session.add(new_query)
+                session.add(db.matrix_queries(bio_id=item, matrix_query=query))
+        for item in split_list:
+            for query in data_cycle_queries:
+                if bool(session.query(db.data_cycle_queries).filter_by(bio_id=item, data_cycle_query=query).first()):
+                    continue
+                response = requests.get(f'https://bio.tools/api/tool/?page=1&q={query}&biotoolsID=\"{item}\"&format=json')
+                if not response.ok:
+                    return
+                response = response.json()
+                if response['count'] < 1:
+                    continue
+                session.add(db.data_cycle_queries(bio_id=item, data_cycle_query=query))
         try:
             session.commit()
         except Exception as e:
-            logging.info(f'ROLLING BACK IN MATRIX QUERIES {repr(e)}')
+            print(f'ROLLING BACK IN MATRIX QUERIES {repr(e)}')
             session.rollback()
                 
-def add_matrix_queries(coll_id, topic):
+def add_queries_matrix_data_cycle(coll_id, topic):
     matrix_queries = ['dna sequence', 'dna secondary structure', 'dna structure', 'genomics', 'rna sequence', 'rna secondary structure', 'rna structure', 'rna omics', 'protein sequence', 'protein secondary structure', 'protein structure', 'protein omics', 'small molecule primary sequence', 'small molecule secondary structure', 'small molecule structure', 'small molecule omics']
+    data_cycle_queries = ['acquisition', 'data processing', 'analysis', 'storage', 'share', 'data management', 'fair']
     coll_or_topic = coll_id if coll_id else topic
     with Session() as session:
         for query in matrix_queries:
@@ -378,13 +403,26 @@ def add_matrix_queries(coll_id, topic):
                     id = tool['biotoolsID']
                     if bool(session.query(db.matrix_queries).filter_by(bio_id=id, matrix_query=query).first()):
                         continue
-                    new_query = db.matrix_queries(bio_id=id, matrix_query=query)
-                    session.add(new_query)
+                    session.add(db.matrix_queries(bio_id=id, matrix_query=query))
+                page = response['next']
+        for query in data_cycle_queries:
+            page = "?page=1"
+            while page:
+                response = requests.get(f'https://bio.tools/api/tool/{page}&q={query}{coll_or_topic}&format=json')
+                if not response.ok:
+                    return
+                response = response.json()
+                tools = response['list']
+                for tool in tools:
+                    id = tool['biotoolsID']
+                    if bool(session.query(db.data_cycle_queries).filter_by(bio_id=id, data_cycle_query=query).first()):
+                        continue
+                    session.add(db.data_cycle_queries(bio_id=id, data_cycle_query=query))
                 page = response['next']
         try:
             session.commit()
         except Exception as e:
-            logging.info(f'ROLLING BACK IN MATRIX QUERIES {repr(e)}')
+            print(f'ROLLING BACK IN MATRIX QUERIES {repr(e)}')
             session.rollback()
 
 def create_new_query(coll_id, topic, tools_list):
@@ -399,23 +437,23 @@ def create_new_query(coll_id, topic, tools_list):
         try:
             session.commit()
         except Exception as e:
-            logging.info(f'ROLLING BACK IN CREATING NEW QUERY {repr(e)}')
+            print(f'ROLLING BACK IN CREATING NEW QUERY {repr(e)}')
             session.rollback()
     return query_id
 
 def create_new_json(query_id):
     with Session() as session:
         query = session.scalars(select(db.queries).where(db.queries.id == query_id)).first()
-        result, matrix_tools, matrix_tools_sizes = get_tools_from_db(query.collection_id, query.topic, query.tools_list)
-        logging.info(f'TOOLS FROM DB: {len(result)}')
+        result, matrix_tools, matrix_tools_sizes, data_cycle_tools, data_cycle_tools_sizes  = get_tools_from_db(query.collection_id, query.topic, query.tools_list)
+        print(f'TOOLS FROM DB: {len(result)}')
         resulting_string = create_display_string(query.collection_id, query.topic)
-        data = {"resulting_string": resulting_string, "data": result, "matrix_tools": matrix_tools, "matrix_tools_sizes": matrix_tools_sizes}
+        data = {"resulting_string": resulting_string, "data": result, "matrix_tools": matrix_tools, "matrix_tools_sizes": matrix_tools_sizes, "data_cycle_tools": data_cycle_tools, "data_cycle_tools_sizes": data_cycle_tools_sizes}
         json_data = json.dumps(data)
         session.add(db.finished_jsons(id=query.id, data=json_data.encode()))
         try:
             session.commit()
         except Exception as e:
-            logging.info(f'ROLLING BACK IN CREATING NEW JSON {repr(e)}')
+            print(f'ROLLING BACK IN CREATING NEW JSON {repr(e)}')
             session.rollback()
 
 if __name__ == "__main__":

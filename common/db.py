@@ -4,7 +4,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.types import LargeBinary
 import json
 
-engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/bio20', poolclass=NullPool)
+engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/bio41', poolclass=NullPool)
 base = declarative_base()
 
 
@@ -20,8 +20,6 @@ class tools(base):
     maturity = Column(String(255))
     license = Column(String(255))
     citation_count = Column(Integer)
-    impact_factor = Column(Float)
-    journals = Column(String(255))
     availability = Column(String(255))
     github_url = Column(String(255))
     github_created_at = Column(String(255))
@@ -31,20 +29,8 @@ class tools(base):
     github_stars = Column(Integer)
     last_updated = Column(String(255))
     options_for_graph = Column(LargeBinary)
-    matrix_queries = []
-    publications = []
-    functions = []
-    topics = []
-    institutes = []
-    platforms = []
-    tool_types = []
-    inputs = []
-    outputs = []
-    collection_ids = []
-    documentations = []
-    elixir_platforms = []
-    elixir_nodes = []
-    elixir_communities = []
+    lists_of_data = Column(LargeBinary)
+    data_for_frontend = Column(LargeBinary)
 
     def serialize(self):
         return {
@@ -57,8 +43,6 @@ class tools(base):
             "maturity": self.maturity,
             "license": self.license,
             "citation_count": self.citation_count,
-            "impact_factor": self.impact_factor,
-            "journals": self.journals,
             "availability": self.availability,
             "github_url": self.github_url,
             "github_created_at": self.github_created_at,
@@ -66,20 +50,7 @@ class tools(base):
             "github_forks": self.github_forks,
             "github_contributions": self.github_contributions,
             "github_stars": self.github_stars,
-            "matrix_queries": self.matrix_queries,
-            "publications": self.publications,
-            "functions": self.functions,
-            "topics": self.topics,
-            "institutes": self.institutes,
-            "platforms": self.platforms,
-            "tool_types": self.tool_types,
-            "inputs": self.inputs,
-            "outputs": self.outputs,
-            "collection_ids": self.collection_ids,
-            "documentations": self.documentations,
-            "elixir_platforms": self.elixir_platforms,
-            "elixir_nodes": self.elixir_nodes,
-            "elixir_communities": self.elixir_communities,
+            "data_for_frontend": None if not self.data_for_frontend else json.loads(self.data_for_frontend.decode('utf-8')),
             "last_updated": self.last_updated,
             "options_for_graph": None if not self.options_for_graph else json.loads(self.options_for_graph.decode('utf-8'))
         }
@@ -91,14 +62,13 @@ class publications(base):
     doi = Column(String(255), primary_key=True)
     bio_id = Column(String(255), primary_key=True)
     pmid = Column(String(255))
-    title = Column(String(255))
+    title = Column(String(5000))
     authors = Column(String(5000))
     journal = Column(String(255))
     impact = Column(Float)
     publication_date = Column(String(255))
     citations_count = Column(Integer)
     citations_source = Column(String(255))
-    citations_list = []
 
     def serialize(self):
         return {
@@ -111,7 +81,6 @@ class publications(base):
             "publication_date": self.publication_date,
             "citations_count": self.citations_count,
             "citations_source": self.citations_source,
-            "citations_list": self.citations_list,
         }
 
 
@@ -129,12 +98,50 @@ class years(base):
 class functions(base):
     __tablename__ = "functions"
 
+    function_id = Column(String(255), primary_key=True)
     bio_id = Column(String(255), primary_key=True)
+    data_for_frontend = Column(LargeBinary)
+    
+    def serialize(self):
+        return {
+            "function_id": self.function_id,
+            "data_for_frontend": None if not self.data_for_frontend else json.loads(self.data_for_frontend.decode('utf-8')),
+        }
+
+class operations(base):
+    __tablename__ = "operations"
+
+    function_id = Column(String(255), primary_key=True)
     term = Column(String(255), primary_key=True)
     uri = Column(String(255))
 
     def serialize(self):
-        return {"term": self.term, "uri": self.uri}
+        return {
+            "term": self.term,
+            "uri": self.uri
+        }
+
+class inputs(base):
+    __tablename__ = "inputs"
+
+    function_id = Column(String(255), primary_key=True)
+    term = Column(String(255), primary_key=True)
+
+    def serialize(self):
+        return {
+            "term": self.term,
+        }
+
+class outputs(base):
+    __tablename__ = "outputs"
+
+    function_id = Column(String(255), primary_key=True)
+    term = Column(String(255), primary_key=True)
+
+    def serialize(self):
+        return {
+            "term": self.term
+        }
 
 
 class topics(base):
@@ -176,27 +183,6 @@ class tool_types(base):
 
     def serialize(self):
         return {"name": self.name}
-
-
-class inputs(base):
-    __tablename__ = "inputs"
-
-    bio_id = Column(String(255), primary_key=True)
-    term = Column(String(255), primary_key=True)
-
-    def serialize(self):
-        return {"term": self.term}
-
-
-class outputs(base):
-    __tablename__ = "outputs"
-
-    bio_id = Column(String(255), primary_key=True)
-    term = Column(String(255), primary_key=True)
-
-    def serialize(self):
-        return {"term": self.term}
-
 
 class collection_ids(base):
     __tablename__ = "collection_ids"
@@ -267,6 +253,15 @@ class matrix_queries(base):
 
     def serialize(self):
         return {"matrix_query": self.matrix_query}
+    
+class data_cycle_queries(base):
+    __tablename__ = "data_cycle_queries"
+
+    bio_id = Column(String(255), primary_key=True)
+    data_cycle_query = Column(String(255), primary_key=True)
+
+    def serialize(self):
+        return {"data_cycle_query": self.data_cycle_query}
     
 class finished_jsons(base):
     __tablename__ = "finished_jsons"
