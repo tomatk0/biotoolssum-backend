@@ -1,4 +1,3 @@
 __pycache__/
-logfiles/
-myprojectenv/
+venv/
 myproject.sock
