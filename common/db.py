@@ -4,7 +4,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.types import LargeBinary
 import json
 
-engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/bio41', poolclass=NullPool)
+engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biotoolssumDB', poolclass=NullPool)
 base = declarative_base()
 
 
@@ -14,7 +14,6 @@ class tools(base):
     bio_id = Column(String(255), primary_key=True)
     name = Column(String(255))
     version = Column(String(255))
-    bio_link = Column(String(255))
     homepage = Column(String(255))
     description = Column(String(5000))
     maturity = Column(String(255))
@@ -29,7 +28,6 @@ class tools(base):
     github_stars = Column(Integer)
     last_updated = Column(String(255))
     options_for_graph = Column(LargeBinary)
-    lists_of_data = Column(LargeBinary)
     data_for_frontend = Column(LargeBinary)
 
     def serialize(self):
@@ -37,7 +35,6 @@ class tools(base):
             "bio_id": self.bio_id,
             "name": self.name,
             "version": self.version,
-            "bio_link": self.bio_link,
             "homepage": self.homepage,
             "description": self.description,
             "maturity": self.maturity,
@@ -63,7 +60,7 @@ class publications(base):
     bio_id = Column(String(255), primary_key=True)
     pmid = Column(String(255))
     title = Column(String(5000))
-    authors = Column(String(5000))
+    authors = Column(String(7500))
     journal = Column(String(255))
     impact = Column(Float)
     publication_date = Column(String(255))
@@ -82,18 +79,6 @@ class publications(base):
             "citations_count": self.citations_count,
             "citations_source": self.citations_source,
         }
-
-
-class years(base):
-    __tablename__ = "years"
-
-    doi = Column(String(255), primary_key=True)
-    year = Column(String(255), primary_key=True)
-    count = Column(String(255))
-
-    def serialize(self):
-        return {"year": self.year, "count": self.count}
-
 
 class functions(base):
     __tablename__ = "functions"
@@ -197,7 +182,7 @@ class documentations(base):
     __tablename__ = "documentations"
 
     bio_id = Column(String(255), primary_key=True)
-    url = Column(String(255), primary_key=True)
+    url = Column(String(500), primary_key=True)
     type = Column(String(255))
 
     def serialize(self):
@@ -243,6 +228,7 @@ class queries(base):
     collection_id = Column(String(255))
     topic = Column(String(255))
     tools_list = Column(String(255))
+    data = Column(LargeBinary(100000000))
 
 
 class matrix_queries(base):
@@ -262,12 +248,6 @@ class data_cycle_queries(base):
 
     def serialize(self):
         return {"data_cycle_query": self.data_cycle_query}
-    
-class finished_jsons(base):
-    __tablename__ = "finished_jsons"
-
-    id = Column(String(255), primary_key=True)
-    data = Column(LargeBinary(100000000))
 
 
 base.metadata.create_all(engine)

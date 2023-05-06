@@ -7,4 +7,4 @@ umask = 0o007
 reload = True
 capture_output = True
 loglevel = "info"
-errorlog = "logfiles/gunicorn_error.log"
+errorlog = "/var/log/biotoolssum/gunicorn_error.log"

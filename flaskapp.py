@@ -102,19 +102,6 @@ def add_platforms(platforms, bio_id):
             result.append(db.platforms(bio_id=bio_id, name=name))
     return create_session_commit_data(result, 'ADD PLATFORMS')
 
-# def add_input_output(functions, bio_id, input_or_output, table):
-#     if not functions:
-#         return True
-#     already_used = []
-#     result = []
-#     for item in functions[0][input_or_output]:
-#         term = item['data']['term']
-#         if not term or term in already_used:
-#             continue
-#         already_used.append(term)
-#         result.append(table(bio_id=bio_id, term=term))
-#     return create_session_commit_data(result, input_or_output)
-
 def add_collection_ids(collection_ids, bio_id):
     collection_ids = list(set(collection_ids))
     result = []
@@ -171,10 +158,12 @@ def add_publications_and_years(publications, bio_id):
             if not response.json():
                 if not doi:
                     continue
-                print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {bio_id}')
-                new_publication = db.publications(doi=doi, bio_id=bio_id)
-                publications_result.append(new_publication)
-                continue
+                if doi not in used_doi:
+                    print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {bio_id}')
+                    new_publication = db.publications(doi=doi, bio_id=bio_id)
+                    publications_result.append(new_publication)
+                    used_doi.append(doi)
+                    continue
             response = response.json()
             doi = doi if 'doi' not in response else response['doi']
             if not doi or doi in used_doi:
@@ -227,7 +216,6 @@ def add_tool(item, id):
     name = item['name']
     options_for_graph = create_options_for_graphs(name, years_for_graphs)
     version = update_version(item['version'])
-    bio_link = f'https://bio.tools/{id}'
     homepage = item['homepage']
     description = item['description']
     maturity = item['maturity']
@@ -235,7 +223,7 @@ def add_tool(item, id):
     availability = update_availability(id)
     url, created_at, updated_at, forks, contributions, stars = update_github_info(item['link'])
     last_updated = (date.today()).strftime("%m/%d/%Y")
-    tool = db.tools(bio_id=id, name=name, version=version, bio_link=bio_link, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count, availability = availability, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions, github_stars=stars, last_updated=last_updated, options_for_graph=options_for_graph)
+    tool = db.tools(bio_id=id, name=name, version=version, homepage=homepage, description=description, maturity=maturity, license=license, citation_count=citation_count, availability = availability, github_url=url, github_created_at=created_at, github_updated_at=updated_at, github_forks=forks, github_contributions=contributions, github_stars=stars, last_updated=last_updated, options_for_graph=options_for_graph)
     return tool
 
 def get_tools_from_given_list(tools_list):
@@ -266,8 +254,7 @@ def get_tools_from_given_list(tools_list):
     print(f'TOOLS FROM API {total}')
     if total > 0:
         add_queries_matrix_data_cycle_list(tools_list)
-        query_id = create_new_query('', '', tools_list)
-        create_new_json(query_id)  
+        create_new_query('', '', tools_list)
 
 @celery.task(ignore_result=True)
 def get_tools_from_api(coll_id, topic, tools_list):
@@ -303,8 +290,7 @@ def get_tools_from_api(coll_id, topic, tools_list):
     print(f'TOOLS FROM API {total}')
     if total > 0:
         add_queries_matrix_data_cycle(coll_id, topic)
-        query_id = create_new_query(coll_id, topic, '')
-        create_new_json(query_id)   
+        create_new_query(coll_id, topic, '')
 
 def create_hash():
     result = ''
@@ -335,10 +321,10 @@ def get_data_from_frontend():
     with Session() as session:
         request_data = request.get_json()
         id = request_data['id']
-        encoded_json = session.scalars(select(db.finished_jsons).where(db.finished_jsons.id == id)).first()
-        if not encoded_json:
+        query = session.scalars(select(db.queries).where(db.queries.id == id)).first()
+        if not query:
             return jsonify(resulting_string="This query is not in the database", data=[])
-        json_data = encoded_json.data.decode('utf-8')
+        json_data = query.data.decode('utf-8')
     return json.loads(json_data)
 
 
@@ -431,29 +417,17 @@ def create_new_query(coll_id, topic, tools_list):
     elif topic:
         topic = topic.split('"')[1]
     with Session() as session:
-        query_id = id=create_hash()
-        new_query = db.queries(id=query_id, collection_id=coll_id, topic=topic, tools_list=tools_list)
+        query_id = create_hash()
+        result, matrix_tools, matrix_tools_sizes, data_cycle_tools, data_cycle_tools_sizes  = get_tools_from_db(coll_id, topic, tools_list)
+        print(f'TOOLS FROM DB: {len(result)}')
+        resulting_string = create_display_string(coll_id, topic)
+        data = {"resulting_string": resulting_string, "data": result, "matrix_tools": matrix_tools, "matrix_tools_sizes": matrix_tools_sizes, "data_cycle_tools": data_cycle_tools, "data_cycle_tools_sizes": data_cycle_tools_sizes}
+        new_query = db.queries(id=query_id, collection_id=coll_id, topic=topic, tools_list=tools_list, data=(json.dumps(data)).encode())
         session.add(new_query)
         try:
             session.commit()
         except Exception as e:
             print(f'ROLLING BACK IN CREATING NEW QUERY {repr(e)}')
-            session.rollback()
-    return query_id
-
-def create_new_json(query_id):
-    with Session() as session:
-        query = session.scalars(select(db.queries).where(db.queries.id == query_id)).first()
-        result, matrix_tools, matrix_tools_sizes, data_cycle_tools, data_cycle_tools_sizes  = get_tools_from_db(query.collection_id, query.topic, query.tools_list)
-        print(f'TOOLS FROM DB: {len(result)}')
-        resulting_string = create_display_string(query.collection_id, query.topic)
-        data = {"resulting_string": resulting_string, "data": result, "matrix_tools": matrix_tools, "matrix_tools_sizes": matrix_tools_sizes, "data_cycle_tools": data_cycle_tools, "data_cycle_tools_sizes": data_cycle_tools_sizes}
-        json_data = json.dumps(data)
-        session.add(db.finished_jsons(id=query.id, data=json_data.encode()))
-        try:
-            session.commit()
-        except Exception as e:
-            print(f'ROLLING BACK IN CREATING NEW JSON {repr(e)}')
             session.rollback()
 
 if __name__ == "__main__":

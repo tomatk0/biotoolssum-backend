@@ -141,7 +141,7 @@ def update_outputs(function_id, items):
         except Exception as e:
             print(f'ROLLING BACK IN UPDATE OUTPUTS {repr(e)}')
 
-def update_functions2(items, id):
+def update_functions(items, id):
     if not items:
         return True
     items_dict = {}
@@ -264,10 +264,11 @@ def update_publications_and_years(publications, id):
             if not response.json():
                 if not doi:
                     continue
-                if not bool(session.query(db.publications).filter_by(bio_id=id, doi=doi).first()):
+                if doi not in used_doi:
                     print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {id} pmid: {pmid}')
                     session.add(db.publications(bio_id=id, doi=doi, pmid=pmid))
-                continue
+                    used_doi.append(doi)
+                    continue
             response = response.json()
             doi = doi if 'doi' not in response else response['doi']
             if not doi or doi in used_doi:
@@ -366,12 +367,11 @@ def update_tool(item, id):
                     session.rollback()
             return
         tool_last_update = datetime.strptime(tool.last_updated, "%m/%d/%Y")
-        # if (tool_last_update.day == date.today().day):
-        #     print(f'TOOL {id} HAS BEEN UPDATED TODAY ALREADY')
-        #     return
+        if (tool_last_update.day == date.today().day):
+            print(f'TOOL {id} HAS BEEN UPDATED TODAY ALREADY')
+            return
         print(f'UPDATING TOOL {id}')
         tool.name = item["name"]
-        tool.bio_link = f'https://bio.tools/{id}'
         tool.homepage = item["homepage"]
         tool.description = item["description"]
         tool.maturity = item["maturity"]
@@ -385,7 +385,7 @@ def update_tool(item, id):
         update_tooltypes(item["toolType"], id)
         update_institutes(item['credit'], id)
         update_topics(item['topic'], id)
-        update_functions2(item['function'], id)
+        update_functions(item['function'], id)
         update_platforms(item['operatingSystem'], id)
         update_collection_ids(item['collectionID'], id)
         update_elixir_platforms_nodes_communities(item['elixirPlatform'], id, db.elixir_platforms)
@@ -420,8 +420,7 @@ def update_json(query_id):
         resulting_string = create_display_string(query.collection_id, query.topic)
         data = {"resulting_string": resulting_string, "data": result, "matrix_tools": matrix_tools, "matrix_tools_sizes": matrix_tools_sizes, "data_cycle_tools": data_cycle_tools, "data_cycle_tools_sizes": data_cycle_tools_sizes}
         json_data = json.dumps(data)
-        existing_json = session.scalars(select(db.finished_jsons).where(db.finished_jsons.id == query_id)).first()
-        existing_json.data = json_data.encode()
+        query.data = json_data.encode()
         try:
             print('UPDATING JSON')
             session.commit()
@@ -450,33 +449,8 @@ def update_tools_from_api(coll_id, topic, tools_list, query_id):
             update_tool(item, id)
     update_json(query_id)
 
-def break_db():
-    with Session() as session:
-        # op1 = session.scalars(select(db.operations).where(db.operations.function_id == "hana_1")).first()
-        # session.delete(op1)
-        # in1 = session.scalars(select(db.inputs).where(db.inputs.function_id == "neemp_1")).first()
-        # session.delete(in1)
-        # out1 = session.scalars(select(db.outputs).where(db.outputs.function_id == "mole_1")).first()
-        # session.delete(out1)
-        # for item in session.scalars(select(db.functions).where(db.functions.bio_id == "begdb")):
-        #     session.delete(item)
-        # for item in session.scalars(select(db.operations).where(db.operations.function_id == "begdb_1")):
-        #     session.delete(item)
-        # for item in session.scalars(select(db.inputs).where(db.inputs.function_id == "begdb_1")):
-        #     session.delete(item)
-        # for item in session.scalars(select(db.outputs).where(db.outputs.function_id == "begdb_1")):
-        #     session.delete(item)
-        # session.delete(session.scalars(select(db.tools).where(db.tools.bio_id == "tarean")).first())
-        session.add(db.operations(function_id="hana_1", term="KOKOTINA", uri="haha"))
-        session.commit()
-
-
 def update_tools():
     with Session() as session:
-        # query = session.scalars(select(db.queries).where(db.queries.id == '?98?C9ZWG2')).first()
-        # print('----------------------------------------------------------------------------------------------------------------------------------------------------------------------')
-        # print(f'CURRENLTY UPDATING QUERY {query.id}')
-        # update_tools_from_api(query.collection_id, query.topic, query.tools_list, query.id)
         print(f'DATE OF UPDATE {date.today()}')
         queries = session.scalars(select(db.queries))
         for q in queries:
@@ -484,5 +458,4 @@ def update_tools():
             print(f"CURRENTLY UPDATING QUERY {q.id}")
             update_tools_from_api(q.collection_id, q.topic, q.tools_list, q.id)
 
-break_db()
 update_tools()

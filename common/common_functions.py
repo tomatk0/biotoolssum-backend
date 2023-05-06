@@ -62,7 +62,7 @@ def update_github_info(link):
             f"https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}",
             auth=(
                 "493043@mail.muni.cz",
-                "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",
+                "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",
             ),
         )
         if not response.ok:
@@ -82,7 +82,7 @@ def update_github_info(link):
             f"https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}/contributors",
             auth=(
                 "493043@mail.muni.cz",
-                "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",
+                "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",
             ),
         )
         if not response.ok:
