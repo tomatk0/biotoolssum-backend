@@ -378,7 +378,19 @@ def update_tool(item, id):
         tool.license = item["license"]
         tool.version = update_version(item["version"])
         tool.availability = update_availability(id)
-        tool.github_url, tool.github_created_at, tool.github_updated_at, tool.github_forks, tool.github_contributions, tool.github_stars = update_github_info(item['link'])
+        url, created_at, updated_at, forks, contributions, stars = update_github_info(item['link'])
+        if not tool.github_url:
+            tool.github_url = url
+        if not tool.github_created_at:
+            tool.github_created_at = created_at
+        if not tool.github_updated_at:
+            tool.github_updated_at = updated_at
+        if not tool.github_forks:
+            tool.github_forks = forks
+        if not tool.github_contributions:
+            tool.github_contributions = contributions
+        if not tool.github_stars:
+            tool.github_stars = stars
         tool.last_updated = (date.today()).strftime("%m/%d/%Y")
         tool.citation_count, years_for_graphs = update_publications_and_years(item['publication'], id)
         tool.options_for_graph = create_options_for_graphs(tool.name, years_for_graphs)
