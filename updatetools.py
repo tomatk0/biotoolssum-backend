@@ -8,6 +8,7 @@ from datetime import date, datetime
 from common.wos import impacts
 from flaskapp import add_tool
 import json
+import os
 
 Session = sessionmaker(bind=db.engine)
 
