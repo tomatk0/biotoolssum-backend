@@ -58,12 +58,10 @@ def update_github_info(link):
         owner_and_repo = github_url.split("/")[-2:]
         if owner_and_repo[0] == 'github.com':
             return None, None, None, None, None, None
+        headers = {'Authorization': 'token ' + "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"}
         response = requests.get(
             f"https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}",
-            auth=(
-                "493043@mail.muni.cz",
-                "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",
-            ),
+            headers=headers
         )
         if not response.ok:
             return None, None, None, None, None, None
@@ -78,12 +76,10 @@ def update_github_info(link):
         )
         forks = 0 if "forks" not in response else response["forks"]
         stars = 0 if "stargazers_count" not in response else response["stargazers_count"]
+        headers = {'Authorization': 'token ' + "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"}
         response = requests.get(
             f"https://api.github.com/repos/{owner_and_repo[0]}/{owner_and_repo[1]}/contributors",
-            auth=(
-                "493043@mail.muni.cz",
-                "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",
-            ),
+            headers=headers
         )
         if not response.ok:
             return (
