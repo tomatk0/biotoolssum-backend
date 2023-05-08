@@ -2,7 +2,12 @@
 
 echo "ENTER THE IP ADDRESS OF THIS VM"
 read ip
-echo "IP_ADDRESS=\"http://$ip\"" | sudo tee -a /etc/environment
+echo "export IP_ADDRESS=\"http://$ip\"" | sudo tee -a /etc/environment
+
+echo "ENTER A VALID GITHUB TOKEN"
+read token
+echo "export GITHUB_TOKEN=\"$token\"" | sudo tee -a /etc/environment
+
 source /etc/environment
 
 CURRENT_USER=$(whoami)
@@ -105,6 +110,7 @@ cat << EOF | sudo tee /etc/systemd/system/flaskapp.service
 [Unit]
 Description=Gunicorn instance to serve flaskapp
 After=network.target
+After=mysql.service
 
 [Service]
 User=$CURRENT_USER
@@ -183,3 +189,5 @@ sudo rm /tmp/cronjob
 
 sudo systemctl restart flaskapp.service
 sudo systemctl restart celery.service
+
+echo "REBOOT YOUR SYSTEM FOR NEW ENVIRONMENT VARIABLES TO WORK"
