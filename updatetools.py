@@ -368,9 +368,9 @@ def update_tool(item, id):
                     session.rollback()
             return
         tool_last_update = datetime.strptime(tool.last_updated, "%m/%d/%Y")
-        if (tool_last_update.day == date.today().day):
-            print(f'TOOL {id} HAS BEEN UPDATED TODAY ALREADY')
-            return
+        # if (tool_last_update.day == date.today().day):
+        #     print(f'TOOL {id} HAS BEEN UPDATED TODAY ALREADY')
+        #     return
         print(f'UPDATING TOOL {id}')
         tool.name = item["name"]
         tool.homepage = item["homepage"]
@@ -462,7 +462,38 @@ def update_tools_from_api(coll_id, topic, tools_list, query_id):
             update_tool(item, id)
     update_json(query_id)
 
+def check_for_duplicate_queries():
+    with Session() as session:
+        collection_ids = []
+        topics = []
+        tools_lists = []
+        queries = session.scalars(select(db.queries))
+        for q in queries:
+            coll_id = q.collection_id
+            topic = q.topic
+            tools_list = q.tools_list
+            if coll_id and coll_id in collection_ids:
+                session.delete(q)
+                print(f'DELETING DUPLICATE QUERY {coll_id}')
+                continue
+            elif coll_id:
+                collection_ids.append(coll_id)
+            if topic and topic in topics:
+                session.delete(q)
+                print(f'DELETING DUPLICATE QUERY {topic}')
+                continue
+            elif topic:
+                topics.append(topic)
+            if tools_list and tools_list in tools_lists:
+                session.delete(q)
+                print(f'DELETING DUPLICATE QUERY {tools_list}')
+                continue
+            elif tools_list:
+                tools_lists.append(tools_list)
+        session.commit()
+
 def update_tools():
+    check_for_duplicate_queries()
     with Session() as session:
         print(f'DATE OF UPDATE {date.today()}')
         queries = session.scalars(select(db.queries))
@@ -470,5 +501,5 @@ def update_tools():
             print('----------------------------------------------------------------------------------------------------------------------------------------------------------------------')
             print(f"CURRENTLY UPDATING QUERY {q.id}")
             update_tools_from_api(q.collection_id, q.topic, q.tools_list, q.id)
-
+            
 update_tools()

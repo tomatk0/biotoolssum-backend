@@ -20,13 +20,6 @@ sudo apt install python3-pip python3-dev build-essential libssl-dev libffi-dev p
 
 python3 -m venv /home/$CURRENT_USER/biotoolssum-backend/venv
 
-echo "ENTER A VALID GITHUB TOKEN"
-read token
-cat << EOF | sudo tee -a /home/ubuntu/biotoolssum-backend/venv/bin/activate
-GITHUB_TOKEN="$token"
-export GITHUB_TOKEN
-EOF
-
 source /home/$CURRENT_USER/biotoolssum-backend/venv/bin/activate
 pip install wheel flask gunicorn requests sqlalchemy flask_cors celery pymysql cryptography
 deactivate
@@ -140,6 +133,7 @@ cat << EOF | sudo tee /etc/systemd/system/celery.service
 [Unit]
 Description=Celery Service
 After=network.target
+After=mysql.service
 
 [Service]
 User=$CURRENT_USER
