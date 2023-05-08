@@ -7,7 +7,7 @@ source /etc/environment
 
 echo "ENTER THE IP ADDRESS OF THIS VM"
 read ip
-echo "IP_ADDRESS=\"$ip\"" | sudo tee -a /etc/environment
+echo "IP_ADDRESS=\"http://$ip\"" | sudo tee -a /etc/environment
 source /etc/environment
 
 CURRENT_USER=$(whoami)
@@ -157,7 +157,7 @@ sudo touch /etc/nginx/sites-available/flaskapp
 cat << EOF | sudo tee /etc/nginx/sites-available/flaskapp
 server {
     listen 80;
-    server_name 147.251.124.170 www.147.251.124.170;
+    server_name $ip www.$ip;
     location / {
 	proxy_read_timeout 3600;
         include proxy_params;
