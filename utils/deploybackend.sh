@@ -1,18 +1,20 @@
 #!/bin/bash
 
-sudo apt update
+echo "ENTER A VALID GITHUB TOKEN"
+read token
+echo "GITHUB_TOKEN=\"$token\"" | sudo tee -a /etc/environment
+source /etc/environment
 
-sudo apt install git
-
-git clone https://github.com/tomatk0/biotoolssum-backend.git
-git clone https://github.com/tomatk0/biotoolssum-frontend.git
-
-echo "GITHUB_TOKEN=\"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\""| sudo tee -a /etc/environment
+echo "ENTER THE IP ADDRESS OF THIS VM"
+read ip
+echo "IP_ADDRESS=\"$ip\"" | sudo tee -a /etc/environment
 source /etc/environment
 
 CURRENT_USER=$(whoami)
 
 # INSTALLING NECESSARY PYTHON LIBRARIES
+
+sudo apt update
 
 sudo apt install python3-pip python3-dev build-essential libssl-dev libffi-dev python3-setuptools python3-venv
 
