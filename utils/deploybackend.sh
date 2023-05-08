@@ -1,10 +1,5 @@
 #!/bin/bash
 
-echo "ENTER A VALID GITHUB TOKEN"
-read token
-echo "GITHUB_TOKEN=\"$token\"" | sudo tee -a /etc/environment
-source /etc/environment
-
 echo "ENTER THE IP ADDRESS OF THIS VM"
 read ip
 echo "IP_ADDRESS=\"http://$ip\"" | sudo tee -a /etc/environment
@@ -19,6 +14,13 @@ sudo apt update
 sudo apt install python3-pip python3-dev build-essential libssl-dev libffi-dev python3-setuptools python3-venv
 
 python3 -m venv /home/$CURRENT_USER/biotoolssum-backend/venv
+
+echo "ENTER A VALID GITHUB TOKEN"
+read token
+cat << EOF | sudo tee -a /home/ubuntu/biotoolssum-backend/venv/bin/activate
+GITHUB_TOKEN="$token"
+export GITHUB_TOKEN
+EOF
 
 source /home/$CURRENT_USER/biotoolssum-backend/venv/bin/activate
 pip install wheel flask gunicorn requests sqlalchemy flask_cors celery pymysql cryptography
