@@ -3,9 +3,11 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import NullPool
 from sqlalchemy.types import LargeBinary
 import json
+from dotenv import load_dotenv
 import os
 
-engine = create_engine(f'mysql+pymysql://{os.getenv('USERNAME_DB')}:{os.getenv('PASSWORD_DB')}@localhost/biotoolssumDB', poolclass=NullPool)
+load_dotenv()
+engine = create_engine(f'mysql+pymysql://{os.getenv("USERNAME_DB")}:{os.getenv("PASSWORD_DB")}@localhost/biotoolssumDB', poolclass=NullPool)
 base = declarative_base()
 
 

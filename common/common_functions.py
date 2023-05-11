@@ -7,7 +7,6 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
 Session = sessionmaker(bind=db.engine, autoflush=False)
 
 def update_version(versions):

@@ -11,6 +11,7 @@ from datetime import date
 from common.common_functions import update_availability, update_github_info, update_version, get_years_for_graphs, create_options_for_graphs, create_display_string, get_tools_from_db
 from celery import Celery
 import json
+from dotenv import load_dotenv
 import os
 
 app = Flask(__name__)
@@ -19,8 +20,9 @@ app.config['CORS_HEADERS'] = 'Content-Type'
 app.app_context().push()
 cors = CORS(app)
 
+load_dotenv()
 Session = sessionmaker(bind=db.engine, autoflush=False)
-celery = Celery(app.name, broker=f'amqp://{os.getenv('USERNAME_RABBIT')}:{os.getenv('PASSWORD_RABBIT')}@localhost:5672/{os.getenv('VHOST_RABBIT')}')
+celery = Celery(app.name, broker=f'amqp://{os.getenv("USERNAME_RABBIT")}:{os.getenv("PASSWORD_RABBIT")}@localhost:5672/{os.getenv("VHOST_RABBIT")}')
 
 def create_session_commit_data(data, location):
     with Session() as session:

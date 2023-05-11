@@ -82,7 +82,6 @@ sudo mysql << EOF
 ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';
 EOF
 
-# SET THE PASSWORD TO password
 sudo mysql_secure_installation
 
 sudo mysql -u root -p << EOF
