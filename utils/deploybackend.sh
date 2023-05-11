@@ -42,14 +42,14 @@ sudo chown $CURRENT_USER:$CURRENT_USER /var/log/biotoolssum/updatetools.log
 
 sudo touch /etc/logrotate.d/biotoolssum
 
-cat << EOF | sudo tee /etc/systemd/system/flaskapp.service
+cat << EOF | sudo tee /etc/logrotate.d/biotoolssum
 /var/log/biotoolssum/gunicorn_error.log {
     rotate 12
     monthly
     compress
     missingok
     notifempty
-    su ubuntu ubuntu
+    su $CURRENT_USER $CURRENT_USER
 }
 
 /var/log/biotoolssum/celery.log {
@@ -58,7 +58,7 @@ cat << EOF | sudo tee /etc/systemd/system/flaskapp.service
     compress
     missingok
     notifempty
-    su ubuntu ubuntu
+    su $CURRENT_USER $CURRENT_USER
 }
 
 /var/log/biotoolssum/updatetools.log {
@@ -67,7 +67,7 @@ cat << EOF | sudo tee /etc/systemd/system/flaskapp.service
     compress
     missingok
     notifempty
-    su ubuntu ubuntu
+    su $CURRENT_USER $CURRENT_USER
 }
 EOF
 
@@ -89,12 +89,18 @@ sudo mysql -u root -p << EOF
 ALTER USER 'root'@'localhost' IDENTIFIED WITH auth_socket;
 EOF
 
+echo "ENTER A USERNAME FOR NEW MYSQL USER"
+read username
+echo "USERNAME_DB=$username" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "ENTER A PASSWORD FOR NEW MYSQL USER"
+read password
+echo "PASSWORD_DB=$password" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+
 sudo mysql << EOF
-CREATE USER 'biotoolsDB'@'localhost' IDENTIFIED BY 'password';
-GRANT CREATE, ALTER, DROP, INSERT, UPDATE, INDEX, DELETE, SELECT, REFERENCES, RELOAD on *.* TO 'biotoolsDB'@'localhost' WITH GRANT OPTION;
+CREATE USER '$username'@'localhost' IDENTIFIED BY '$password';
+GRANT CREATE, ALTER, DROP, INSERT, UPDATE, INDEX, DELETE, SELECT, REFERENCES, RELOAD on *.* TO '$username'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 CREATE DATABASE biotoolssumDB;
-CREATE DATABASE brokerDB;
 EOF
 
 # SETTING UP FLASKAPP SERVICE (GUNICORN)
@@ -123,11 +129,21 @@ sudo systemctl enable flaskapp.service
 
 # SETTING UP RABBIT-MQ AND CELERY SERVICE
 
+echo "ENTER A USERNAME FOR NEW RABBITMQ USER"
+read username
+echo "USERNAME_RABBIT=$username" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "ENTER A PASSWORD FOR NEW RABBITMQ USER"
+read password
+echo "PASSWORD_RABBIT=$password" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "ENTER A USERNAME FOR NEW RABBITMQ VHOST"
+read vhost
+echo "VHOST_RABBIT=$vhost" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+
 sudo apt-get install rabbitmq-server
-sudo rabbitmqctl add_user myuser mypassword
-sudo rabbitmqctl add_vhost myvhost
-sudo rabbitmqctl set_user_tags myuser mytag
-sudo rabbitmqctl set_permissions -p myvhost myuser ".*" ".*" ".*"
+sudo rabbitmqctl add_user $username $password
+sudo rabbitmqctl add_vhost $vhost
+sudo rabbitmqctl set_user_tags $username mytag
+sudo rabbitmqctl set_permissions -p $vhost $username ".*" ".*" ".*"
 
 sudo touch /etc/systemd/system/celery.service
 

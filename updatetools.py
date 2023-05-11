@@ -368,9 +368,9 @@ def update_tool(item, id):
                     session.rollback()
             return
         tool_last_update = datetime.strptime(tool.last_updated, "%m/%d/%Y")
-        # if (tool_last_update.day == date.today().day):
-        #     print(f'TOOL {id} HAS BEEN UPDATED TODAY ALREADY')
-        #     return
+        if (tool_last_update.day == date.today().day):
+            print(f'TOOL {id} HAS BEEN UPDATED TODAY ALREADY')
+            return
         print(f'UPDATING TOOL {id}')
         tool.name = item["name"]
         tool.homepage = item["homepage"]
@@ -378,7 +378,9 @@ def update_tool(item, id):
         tool.maturity = item["maturity"]
         tool.license = item["license"]
         tool.version = update_version(item["version"])
-        tool.availability = update_availability(id)
+        availability = update_availability(id)
+        if not tool.availability:
+            tool.availability = availability
         url, created_at, updated_at, forks, contributions, stars = update_github_info(item['link'])
         if not tool.github_url:
             tool.github_url = url

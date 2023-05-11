@@ -3,8 +3,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.pool import NullPool
 from sqlalchemy.types import LargeBinary
 import json
+import os
 
-engine = create_engine('mysql+pymysql://biotoolsDB:password@localhost/biotoolssumDB', poolclass=NullPool)
+engine = create_engine(f'mysql+pymysql://{os.getenv('USERNAME_DB')}:{os.getenv('PASSWORD_DB')}@localhost/biotoolssumDB', poolclass=NullPool)
 base = declarative_base()
 
 

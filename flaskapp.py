@@ -11,6 +11,7 @@ from datetime import date
 from common.common_functions import update_availability, update_github_info, update_version, get_years_for_graphs, create_options_for_graphs, create_display_string, get_tools_from_db
 from celery import Celery
 import json
+import os
 
 app = Flask(__name__)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -19,7 +20,7 @@ app.app_context().push()
 cors = CORS(app)
 
 Session = sessionmaker(bind=db.engine, autoflush=False)
-celery = Celery(app.name, broker='amqp://myuser:mypassword@localhost:5672/myvhost', backend='db+mysql+pymysql://biotoolsDB:password@localhost/brokerDB')
+celery = Celery(app.name, broker=f'amqp://{os.getenv('USERNAME_RABBIT')}:{os.getenv('PASSWORD_RABBIT')}@localhost:5672/{os.getenv('VHOST_RABBIT')}')
 
 def create_session_commit_data(data, location):
     with Session() as session:
