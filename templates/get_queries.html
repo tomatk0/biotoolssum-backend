@@ -6,6 +6,12 @@
         <title>bio.tools Sum backend</title>
     </head>
     <body>
+        <nav class="navbar" style="background-color: #ef7500;">
+            <div class="navbar-brand d-flex align-items-center">
+              <a href="/" ><img src="{{ url_for('static', filename='elixir-logo.png') }}" class="d-inline-block" style="margin-right: 1rem; width: 3rem; height: 3rem;" alt="Elixir logo"></a>
+              <span style="color: white">bio.tools Sum backend server</span>
+            </div>
+        </nav>
         {% block content %}
             <table class="table">
                 <thead>

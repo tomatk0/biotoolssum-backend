@@ -74,6 +74,8 @@ EOF
 
 sudo mysql_secure_installation
 
+echo "LOGGING INTO MYSQL AS ROOT"
+
 sudo mysql -u root -p << EOF
 ALTER USER 'root'@'localhost' IDENTIFIED WITH auth_socket;
 EOF
@@ -119,10 +121,10 @@ echo "PASSWORD_RABBIT=$RABBIT_PASSWORD" | sudo tee -a /home/$CURRENT_USER/biotoo
 echo "VHOST_RABBIT=$RABBIT_VHOST" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
 
 yes | sudo apt-get install rabbitmq-server
-sudo rabbitmqctl add_user $RABBIT_USERNAME $RABBIT_PASSWORD
-sudo rabbitmqctl add_vhost $RABBIT_VHOST
-sudo rabbitmqctl set_user_tags $RABBIT_USERNAME mytag
-sudo rabbitmqctl set_permissions -p $RABBIT_VHOST $RABBIT_USERNAME ".*" ".*" ".*"
+sudo rabbitmqctl add_user $USERNAME_RABBIT $PASSWORD_RABBIT
+sudo rabbitmqctl add_vhost $VHOST_RABBIT
+sudo rabbitmqctl set_user_tags $USERNAME_RABBIT mytag
+sudo rabbitmqctl set_permissions -p $VHOST_RABBIT $USERNAME_RABBIT ".*" ".*" ".*"
 
 sudo touch /etc/systemd/system/celery.service
 
@@ -146,7 +148,7 @@ EOF
 sudo systemctl start celery.service
 sudo systemctl enable celery.service
 
-# SETTING UP NGINX (server_name should be changed to a valid IP)
+# SETTING UP NGINX
 
 sudo apt update
 yes | sudo apt install nginx
@@ -161,6 +163,9 @@ server {
 	proxy_read_timeout 3600;
         include proxy_params;
         proxy_pass http://unix:/home/$CURRENT_USER/biotoolssum-backend/myproject.sock;
+    }
+    location /static {
+        alias /home/$CURRENT_USER/biotoolssum-backend/static;
     }
 }
 EOF
