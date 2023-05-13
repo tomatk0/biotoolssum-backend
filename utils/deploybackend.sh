@@ -1,24 +1,14 @@
 #!/bin/bash
 
-echo "ENTER THE IP ADDRESS OF THIS VM"
-read ip
-echo "export IP_ADDRESS=\"http://$ip\"" | sudo tee -a /etc/environment
-
-echo "ENTER A VALID GITHUB TOKEN"
-read token
-echo "export GITHUB_TOKEN=\"$token\"" | sudo tee -a /etc/environment
-
-source /etc/environment
-
 CURRENT_USER=$(whoami)
 
-echo "GITHUB_TOKEN=$token" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "GITHUB_TOKEN=$GITHUB_TOKEN" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
 
 # INSTALLING NECESSARY PYTHON LIBRARIES
 
 sudo apt update
 
-sudo apt install python3-pip python3-dev build-essential libssl-dev libffi-dev python3-setuptools python3-venv
+yes | sudo apt install python3-pip python3-dev build-essential libssl-dev libffi-dev python3-setuptools python3-venv
 
 python3 -m venv /home/$CURRENT_USER/biotoolssum-backend/venv
 
@@ -76,7 +66,7 @@ sudo logrotate -f /etc/logrotate.d/biotoolssum
 
 # SETTING UP MYSQL
 sudo apt update
-sudo apt install mysql-server
+yes | sudo apt install mysql-server
 
 sudo mysql << EOF
 ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';
@@ -88,16 +78,12 @@ sudo mysql -u root -p << EOF
 ALTER USER 'root'@'localhost' IDENTIFIED WITH auth_socket;
 EOF
 
-echo "ENTER A USERNAME FOR NEW MYSQL USER"
-read username
-echo "USERNAME_DB=$username" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
-echo "ENTER A PASSWORD FOR NEW MYSQL USER"
-read password
-echo "PASSWORD_DB=$password" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "USERNAME_DB=$USERNAME_DB" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "PASSWORD_DB=$PASSWORD_DB" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
 
 sudo mysql << EOF
-CREATE USER '$username'@'localhost' IDENTIFIED BY '$password';
-GRANT CREATE, ALTER, DROP, INSERT, UPDATE, INDEX, DELETE, SELECT, REFERENCES, RELOAD on *.* TO '$username'@'localhost' WITH GRANT OPTION;
+CREATE USER '$USERNAME_DB'@'localhost' IDENTIFIED BY '$PASSWORD_DB';
+GRANT CREATE, ALTER, DROP, INSERT, UPDATE, INDEX, DELETE, SELECT, REFERENCES, RELOAD on *.* TO '$USERNAME_DB'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 CREATE DATABASE biotoolssumDB;
 EOF
@@ -128,21 +114,15 @@ sudo systemctl enable flaskapp.service
 
 # SETTING UP RABBIT-MQ AND CELERY SERVICE
 
-echo "ENTER A USERNAME FOR NEW RABBITMQ USER"
-read username
-echo "USERNAME_RABBIT=$username" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
-echo "ENTER A PASSWORD FOR NEW RABBITMQ USER"
-read password
-echo "PASSWORD_RABBIT=$password" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
-echo "ENTER A USERNAME FOR NEW RABBITMQ VHOST"
-read vhost
-echo "VHOST_RABBIT=$vhost" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "USERNAME_RABBIT=$RABBIT_USERNAME" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "PASSWORD_RABBIT=$RABBIT_PASSWORD" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "VHOST_RABBIT=$RABBIT_VHOST" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
 
-sudo apt-get install rabbitmq-server
-sudo rabbitmqctl add_user $username $password
-sudo rabbitmqctl add_vhost $vhost
-sudo rabbitmqctl set_user_tags $username mytag
-sudo rabbitmqctl set_permissions -p $vhost $username ".*" ".*" ".*"
+yes | sudo apt-get install rabbitmq-server
+sudo rabbitmqctl add_user $RABBIT_USERNAME $RABBIT_PASSWORD
+sudo rabbitmqctl add_vhost $RABBIT_VHOST
+sudo rabbitmqctl set_user_tags $RABBIT_USERNAME mytag
+sudo rabbitmqctl set_permissions -p $RABBIT_VHOST $RABBIT_USERNAME ".*" ".*" ".*"
 
 sudo touch /etc/systemd/system/celery.service
 
@@ -169,14 +149,14 @@ sudo systemctl enable celery.service
 # SETTING UP NGINX (server_name should be changed to a valid IP)
 
 sudo apt update
-sudo apt install nginx
+yes | sudo apt install nginx
 
 sudo touch /etc/nginx/sites-available/flaskapp
 
 cat << EOF | sudo tee /etc/nginx/sites-available/flaskapp
 server {
     listen 80;
-    server_name $ip www.$ip;
+    server_name $IP_ADDRESS www.$IP_ADDRESS;
     location / {
 	proxy_read_timeout 3600;
         include proxy_params;
@@ -191,7 +171,6 @@ sudo systemctl restart nginx
 
 # SETTING UP A CRON JOB FOR UPDATING TOOLS
 
-CURRENT_USER=$(whoami)
 echo "MAILTO=\"\"" | sudo tee -a /tmp/cronjob
 echo "0 0 */3 * * /home/$CURRENT_USER/biotoolssum-backend/venv/bin/python3 /home/$CURRENT_USER/biotoolssum-backend/updatetools.py >> /var/log/biotoolssum/updatetools.log 2>&1" | sudo tee -a /tmp/cronjob
 cat /tmp/cronjob
@@ -200,5 +179,3 @@ sudo rm /tmp/cronjob
 
 sudo systemctl restart flaskapp.service
 sudo systemctl restart celery.service
-
-echo "REBOOT YOUR SYSTEM FOR NEW ENVIRONMENT VARIABLES TO WORK"
