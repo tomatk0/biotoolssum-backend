@@ -426,6 +426,7 @@ def update_tools_from_given_list(tools_list):
         item = response['list'][0]
         id = item['biotoolsID']
         update_tool(item, id)
+    update_json(query_id)
 
 def update_json(query_id):
     with Session() as session:

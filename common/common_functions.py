@@ -289,7 +289,8 @@ def get_tools_from_db(coll_id, topic, tools_list):
                 get_lists_for_tool(t)
                 result.append(t.serialize())
             matrix_tools, matrix_tools_sizes = separate_tools_by_matrix_queries(result)
-            return result, matrix_tools, matrix_tools_sizes
+            data_cycle_tools, data_cycle_tools_sizes = separate_tools_by_data_cycle_queries(result)
+            return result, matrix_tools, matrix_tools_sizes, data_cycle_tools, data_cycle_tools_sizes
         
         if coll_id:
             query = select(db.tools).distinct().where(db.tools.bio_id == db.collection_ids.bio_id, db.collection_ids.coll_id.ilike(f'{coll_id}'))
