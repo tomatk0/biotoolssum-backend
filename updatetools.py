@@ -10,7 +10,7 @@ from flaskapp import add_tool
 import json
 import os
 
-Session = sessionmaker(bind=db.engine)
+Session = sessionmaker(bind=db.engine, autoflush=False)
 
 def update_tooltypes(tooltypes, id):
     tooltypes = list(set(tooltypes))
