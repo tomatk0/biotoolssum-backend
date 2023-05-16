@@ -116,15 +116,17 @@ sudo systemctl enable flaskapp.service
 
 # SETTING UP RABBIT-MQ AND CELERY SERVICE
 
-echo "USERNAME_RABBIT=$RABBIT_USERNAME" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
-echo "PASSWORD_RABBIT=$RABBIT_PASSWORD" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
-echo "VHOST_RABBIT=$RABBIT_VHOST" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "USERNAME_RABBIT=$USERNAME_RABBIT" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "PASSWORD_RABBIT=$PASSWORD_RABBIT" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
+echo "VHOST_RABBIT=$VHOST_RABBIT" | sudo tee -a /home/$CURRENT_USER/biotoolssum-backend/.env
 
 yes | sudo apt-get install rabbitmq-server
 sudo rabbitmqctl add_user $USERNAME_RABBIT $PASSWORD_RABBIT
 sudo rabbitmqctl add_vhost $VHOST_RABBIT
 sudo rabbitmqctl set_user_tags $USERNAME_RABBIT mytag
 sudo rabbitmqctl set_permissions -p $VHOST_RABBIT $USERNAME_RABBIT ".*" ".*" ".*"
+
+sudo systemctl restart rabbitmq-server.service
 
 sudo touch /etc/systemd/system/celery.service
 

@@ -159,14 +159,14 @@ def add_publications_and_years(publications, bio_id):
             if not response.ok:
                 continue
             if not response.json():
-                if not doi:
+                if not doi or doi in used_doi:
+                    print(f'DOI MISSING {bio_id} OR DUPLICATE DOI')
                     continue
-                if doi not in used_doi:
-                    print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {bio_id}')
-                    new_publication = db.publications(doi=doi, bio_id=bio_id)
-                    publications_result.append(new_publication)
-                    used_doi.append(doi)
-                    continue
+                print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {bio_id}')
+                new_publication = db.publications(doi=doi, bio_id=bio_id)
+                publications_result.append(new_publication)
+                used_doi.append(doi)
+                continue
             response = response.json()
             doi = doi if 'doi' not in response else response['doi']
             if not doi or doi in used_doi:
@@ -186,7 +186,7 @@ def add_publications_and_years(publications, bio_id):
             tool_citations_count += pub_citations_count
             title = '' if 'title' not in response else response['title']
             years_for_graphs[title] = get_years_for_graphs(doi)
-            publications_result.append(db.publications(doi=doi, bio_id=bio_id, pmid=pmid, title=title, authors=authors, journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
+            publications_result.append(db.publications(doi=doi, bio_id=bio_id, pmid=pmid, title=title, authors=authors[:7500], journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
         return tool_citations_count, publications_result, years_for_graphs
     except Exception as e:
         print(f'ERROR IN ADD PUBLICATIONS AND YEARS {repr(e)}')

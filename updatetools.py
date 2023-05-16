@@ -263,13 +263,15 @@ def update_publications_and_years(publications, id):
             if not response.ok:
                 continue
             if not response.json():
-                if not doi:
+                if not doi or doi in used_doi:
+                    print(f'DOI MISSING {id} OR DUPLICATE DOI')
                     continue
-                if doi not in used_doi:
-                    print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {id} pmid: {pmid}')
-                    session.add(db.publications(bio_id=id, doi=doi, pmid=pmid))
-                    used_doi.append(doi)
+                if session.scalars(select(db.publications).where(db.publications.bio_id == id, db.publications.doi == doi)).first():
                     continue
+                print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {id}')
+                session.add(db.publications(bio_id=id, doi=doi))
+                used_doi.append(doi)
+                continue
             response = response.json()
             doi = doi if 'doi' not in response else response['doi']
             if not doi or doi in used_doi:
@@ -296,7 +298,7 @@ def update_publications_and_years(publications, id):
             title = '' if 'title' not in response else response['title']
             years_for_graphs[title] = get_years_for_graphs(doi)
             print(f"ADDING NEW PUBLICATION {doi}")
-            session.add(db.publications(doi=doi, bio_id=id, pmid=pmid, title=title, authors=authors, journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
+            session.add(db.publications(doi=doi, bio_id=id, pmid=pmid, title=title, authors=authors[:7500], journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
         try:
             session.commit()
         except Exception as e:
@@ -412,7 +414,7 @@ def update_tool(item, id):
             print(f'ROLLING BACK IN UPDATE TOOLS {repr(e)}')
             session.rollback()
 
-def update_tools_from_given_list(tools_list):
+def update_tools_from_given_list(tools_list, query_id):
     split_list = tools_list.split(',')
     if not split_list or split_list[0] == '':
         return
@@ -448,7 +450,7 @@ def update_tools_from_api(coll_id, topic, tools_list, query_id):
     coll_id = f'&collectionID=\"{coll_id}\"' if coll_id else ''
     topic = f'&topic=\"{topic}\"' if topic else ''
     if not coll_id and not topic:
-        update_tools_from_given_list(tools_list)
+        update_tools_from_given_list(tools_list, query_id)
         return
     response = requests.get(f'https://bio.tools/api/tool/?{coll_id}{topic}&format=json')
     if not response.ok:
