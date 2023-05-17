@@ -248,63 +248,63 @@ def update_publications_and_years(publications, id):
     tool_citations_count = 0
     used_doi = []
     years_for_graphs = {}
-    with Session() as session:
-        for publication in publications:
-            doi = '' if 'doi' not in publication or not publication['doi'] else publication['doi'].lower()
-            pmid = '' if 'pmid' not in publication or not publication['pmid'] else publication['pmid']
-            response = requests.get(f"https://badge.dimensions.ai/details/doi/{doi}/metadata.json?domain=https://bio.tools")
-            if doi:
-                response = requests.get(f"https://badge.dimensions.ai/details/doi/{doi}/metadata.json?domain=https://bio.tools")
-            elif pmid:
-                response = requests.get(f"https://badge.dimensions.ai/details/pmid/{pmid}/metadata.json?domain=https://bio.tools")
-            else:
-                print(f'NOT DOI NOR PMID')
-                continue
-            if not response.ok:
-                continue
-            if not response.json():
+    try:
+        with Session() as session:
+            for publication in publications:
+                doi = '' if 'doi' not in publication or not publication['doi'] else publication['doi'].lower()
+                pmid = '' if 'pmid' not in publication or not publication['pmid'] else publication['pmid']
+                if doi:
+                    response = requests.get(f"https://badge.dimensions.ai/details/doi/{doi}/metadata.json?domain=https://bio.tools")
+                elif pmid:
+                    response = requests.get(f"https://badge.dimensions.ai/details/pmid/{pmid}/metadata.json?domain=https://bio.tools")
+                else:
+                    print(f'NOT DOI NOR PMID')
+                    continue
+                if not response.ok:
+                    continue
+                if not response.json():
+                    if not doi or doi in used_doi:
+                        print(f'DOI MISSING {id} OR DUPLICATE DOI')
+                        continue
+                    if session.scalars(select(db.publications).where(db.publications.bio_id == id, db.publications.doi == doi)).first():
+                        continue
+                    print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {id}')
+                    session.add(db.publications(bio_id=id, doi=doi))
+                    used_doi.append(doi)
+                    continue
+                response = response.json()
+                doi = doi if 'doi' not in response else response['doi']
                 if not doi or doi in used_doi:
-                    print(f'DOI MISSING {id} OR DUPLICATE DOI')
+                    print(f"PUB DOI MISSING {id} OR DUPLICATE DOI")
                     continue
-                if session.scalars(select(db.publications).where(db.publications.bio_id == id, db.publications.doi == doi)).first():
-                    continue
-                print(f'CREATING PUBLICATION WITH DOI ONLY doi: {doi} bio_id: {id}')
-                session.add(db.publications(bio_id=id, doi=doi))
                 used_doi.append(doi)
-                continue
-            response = response.json()
-            doi = doi if 'doi' not in response else response['doi']
-            if not doi or doi in used_doi:
-                print(f"PUB DOI MISSING {id} OR DUPLICATE DOI")
-                continue
-            used_doi.append(doi)
-            pub_citations_count = 0 if 'times_cited' not in response else response['times_cited']
-            tool_citations_count += pub_citations_count
-            journal = '' if 'journal' not in response or 'title' not in response['journal'] else response['journal']['title']
-            impact = 0
-            if journal:
-                impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
-            existing_publication = session.scalars(select(db.publications).where(db.publications.bio_id == id, db.publications.doi == doi)).first()
-            if existing_publication:
-                print(f'UPDATING PUBLICATION {doi}, CITATIONS COUNT BEFORE: {existing_publication.citations_count} AFTER: {pub_citations_count}')
-                existing_publication.citations_count = pub_citations_count
-                years_for_graphs[existing_publication.title] = get_years_for_graphs(existing_publication.doi)
-                continue
-            badge_dimensions_id = '' if 'id' not in response else response['id']
-            citations_source = f"https://badge.dimensions.ai/details/id/{badge_dimensions_id}/citations"
-            authors = '' if 'author_names' not in response else response['author_names']
-            date = '' if 'date' not in response else response['date']
-            pmid = '' if 'pmid' not in response else response['pmid']
-            title = '' if 'title' not in response else response['title']
-            years_for_graphs[title] = get_years_for_graphs(doi)
-            print(f"ADDING NEW PUBLICATION {doi}")
-            session.add(db.publications(doi=doi, bio_id=id, pmid=pmid, title=title, authors=authors[:7500], journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
-        try:
+                pub_citations_count = 0 if 'times_cited' not in response else response['times_cited']
+                tool_citations_count += pub_citations_count
+                journal = '' if 'journal' not in response or 'title' not in response['journal'] else response['journal']['title']
+                impact = 0
+                if journal:
+                    impact = 0 if journal.upper() not in impacts else impacts[journal.upper()]
+                existing_publication = session.scalars(select(db.publications).where(db.publications.bio_id == id, db.publications.doi == doi)).first()
+                if existing_publication:
+                    print(f'UPDATING PUBLICATION {doi}, CITATIONS COUNT BEFORE: {existing_publication.citations_count} AFTER: {pub_citations_count}')
+                    existing_publication.citations_count = pub_citations_count
+                    years_for_graphs[existing_publication.title] = get_years_for_graphs(existing_publication.doi)
+                    continue
+                badge_dimensions_id = '' if 'id' not in response else response['id']
+                citations_source = f"https://badge.dimensions.ai/details/id/{badge_dimensions_id}/citations"
+                authors = '' if 'author_names' not in response else response['author_names']
+                date = '' if 'date' not in response else response['date']
+                pmid = '' if 'pmid' not in response else response['pmid']
+                title = '' if 'title' not in response else response['title']
+                years_for_graphs[title] = get_years_for_graphs(doi)
+                print(f"ADDING NEW PUBLICATION {doi}")
+                session.add(db.publications(doi=doi, bio_id=id, pmid=pmid, title=title, authors=authors[:7500], journal=journal, impact=round(impact, 3), publication_date=date, citations_count=pub_citations_count, citations_source=citations_source))
             session.commit()
-        except Exception as e:
-            print(f'ROLLING BACK IN UPDATE PUBLICATIONS AND YEARS {repr(e)}')
-            session.rollback()
-        return tool_citations_count, years_for_graphs
+            return tool_citations_count, years_for_graphs
+    except Exception as e:
+        print(f'ROLLING BACK IN UPDATE PUBLICATIONS AND YEARS {repr(e)}')
+        session.rollback()
+        return 0, None
 
 def add_queries_matrix_data_cycle(id):
     matrix_queries = ['dna sequence', 'dna secondary structure', 'dna structure', 'genomics', 'rna sequence', 'rna secondary structure', 'rna structure', 'rna omics', 'protein sequence', 'protein secondary structure', 'protein structure', 'protein omics', 'small molecule primary sequence', 'small molecule secondary structure', 'small molecule structure', 'small molecule omics']
@@ -381,24 +381,28 @@ def update_tool(item, id):
         tool.license = item["license"]
         tool.version = update_version(item["version"])
         availability = update_availability(id)
-        if not tool.availability:
+        if availability:
             tool.availability = availability
         url, created_at, updated_at, forks, contributions, stars = update_github_info(item['link'])
-        if not tool.github_url:
+        if url:
             tool.github_url = url
-        if not tool.github_created_at:
+        if created_at:
             tool.github_created_at = created_at
-        if not tool.github_updated_at:
+        if updated_at:
             tool.github_updated_at = updated_at
-        if not tool.github_forks:
+        if forks:
             tool.github_forks = forks
-        if not tool.github_contributions:
+        if contributions:
             tool.github_contributions = contributions
-        if not tool.github_stars:
+        if stars:
             tool.github_stars = stars
         tool.last_updated = (date.today()).strftime("%m/%d/%Y")
-        tool.citation_count, years_for_graphs = update_publications_and_years(item['publication'], id)
-        tool.options_for_graph = create_options_for_graphs(tool.name, years_for_graphs)
+        citation_count, years_for_graphs = update_publications_and_years(item['publication'], id)
+        if citation_count >= tool.citation_count:
+            tool.citation_count = citation_count
+        options_for_graph = create_options_for_graphs(tool.name, years_for_graphs)
+        if options_for_graph:
+            tool.options_for_graph = options_for_graph
         update_tooltypes(item["toolType"], id)
         update_institutes(item['credit'], id)
         update_topics(item['topic'], id)
